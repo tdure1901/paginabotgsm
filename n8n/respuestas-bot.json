@@ -191,13 +191,22 @@
     },
     {
       "parameters": {
-        "url": "=https://acafuwhszbdeznqovpwu.supabase.co/rest/v1/whatsapp_notificaciones?telefono_destino=eq.{{ $json.telefono }}&order=notificado_at.desc.nullslast,created_at.desc&limit=1",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "supabaseApi",
-        "options": {}
+        "operation": "getAll",
+        "tableId": "ultima_notificacion_por_telefono",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "telefono_destino",
+              "condition": "eq",
+              "keyValue": "={{ $json.telefono }}"
+            }
+          ]
+        }
       },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.5,
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
       "position": [
         176,
         576
@@ -210,7 +219,7 @@
           "name": "Supabase account"
         }
       },
-      "notes": "Trae la notificación MÁS RECIENTE de ese teléfono (consulta directa a Supabase con la credencial de siempre).",
+      "notes": "Ahora lee la vista ultima_notificacion_por_telefono (siempre la más reciente)",
       "notesInFlow": true
     },
     {
