@@ -187,8 +187,18 @@ const normalizarNro = (x: string | undefined) =>
 /** Motivos a los que se les manda el aviso (los mismos que filtra la vista reclamos_para_notificar) */
 export const MOTIVOS_ELEGIBLES = ["ALUMBRADO PUBLICO", "ARBOL", "LIMPIEZA Y RECOLECCION DOMICILIARIA"];
 
+/** "Alumbrado Público " → "ALUMBRADO PUBLICO" (sin acentos, mayúsculas y espacios simples) */
+export function normalizarMotivo(motivo: string | null) {
+  return (motivo ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
 export function motivoElegible(motivo: string | null) {
-  return MOTIVOS_ELEGIBLES.includes((motivo ?? "").trim().toUpperCase());
+  return MOTIVOS_ELEGIBLES.map(normalizarMotivo).includes(normalizarMotivo(motivo));
 }
 
 /** El reclamo está en condiciones de recibir el aviso (sin mirar el teléfono) */

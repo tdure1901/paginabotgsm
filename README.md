@@ -1,6 +1,8 @@
 # Reclamos Bot · Panel municipal
 
 Panel para el bot de seguimiento de reclamos (Supabase + n8n + WhatsApp).
+
+📘 **[Manual de uso y mantenimiento](docs/MANUAL.md)**: cómo usar el panel, agregar motivos y plantillas, recomendaciones y solución de problemas.
 Usa **la misma base de Supabase** que la app de Lovable (`subirreclamosbot.lovable.app`): tablas `reclamos` y `whatsapp_notificaciones`, y el mismo login por email y contraseña.
 
 ## Secciones
@@ -14,7 +16,7 @@ Usa **la misma base de Supabase** que la app de Lovable (`subirreclamosbot.lovab
 
 ### Reglas de elegibilidad para WhatsApp
 
-Las mismas que la vista `reclamos_para_notificar`: Estado `Cerrado` + Situación `Resp.Positiva` + teléfono válido + `whatsapp_eligible`, y que no tenga notificación o esté en `pendiente`/`error`. El panel calcula `whatsapp_eligible` al importar y lo pone en `false` si el teléfono está en la lista de no elegibles (`supabase/exclusiones.sql`). Al corregir o excluir un teléfono desde el panel también se actualizan los reclamos ya cargados. Si un archivo nuevo trae mal un teléfono que ya se había corregido, se conserva la corrección.
+Las mismas que la vista `reclamos_para_notificar`: Estado `Cerrado` + Situación `Resp.Positiva` + motivo habilitado (sin importar mayúsculas ni acentos) + teléfono válido + `whatsapp_eligible`, y que no tenga notificación o esté en `pendiente`/`error`. El panel calcula `whatsapp_eligible` al importar y lo pone en `false` si el teléfono está en la lista de no elegibles (`supabase/exclusiones.sql`). Al corregir o excluir un teléfono desde el panel también se actualizan los reclamos ya cargados. Si un archivo nuevo trae mal un teléfono que ya se había corregido, se conserva la corrección.
 
 La clasificación de respuestas es la misma del monitoreo de Lovable: `respuesta_usuario` = `si`/`1` → SÍ, `no`/`2` → NO; si no, se mira `estado` (`sin …` → sin respuesta, `respondido …`, `enviado` → esperando).
 

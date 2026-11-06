@@ -15,8 +15,10 @@ where r.estado = 'Cerrado'
   and r.situacion = 'Resp.Positiva'
   and r.telefono_valido = true
   and r.whatsapp_eligible = true
-  -- Solo estos motivos (sin importar mayúsculas)
-  and upper(trim(r.motivo)) in ('ALUMBRADO PUBLICO', 'ARBOL', 'LIMPIEZA Y RECOLECCION DOMICILIARIA')
+  -- Solo estos motivos (sin importar mayúsculas, acentos ni espacios de más).
+  -- Escribirlos en MAYÚSCULAS y SIN acentos. Tienen que coincidir con MOTIVOS_ELEGIBLES en src/lib/importacion.ts
+  and translate(upper(regexp_replace(trim(r.motivo), '\s+', ' ', 'g')), 'ÁÉÍÓÚÜáéíóúü', 'AEIOUUAEIOUU')
+      in ('ALUMBRADO PUBLICO', 'ARBOL', 'LIMPIEZA Y RECOLECCION DOMICILIARIA')
   -- Nunca a números de la lista de no elegibles
   and not exists (
     select 1 from public.whatsapp_exclusiones e
