@@ -67,6 +67,9 @@ export default function Layout({ email }: { email?: string }) {
             Datos de ejemplo guardados en este navegador. Configurá Supabase en <code>.env</code> para usar tu base real.
           </div>
         )}
+        <div className="hidden px-5 pb-3 text-[10px] text-slate-400 md:block" title="Versión publicada del panel">
+          Versión {__VERSION__} · {new Date(__BUILD_DATE__).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+        </div>
       </aside>
       <main className="min-w-0 flex-1">
         {error && (
