@@ -203,8 +203,8 @@ export async function cargarTelefonosInvalidos(): Promise<Reclamo[]> {
       .from("reclamos")
       .select(COLS_RECLAMO)
       .eq("telefono_valido", false)
-      .eq("estado", "Cerrado")
-      .eq("situacion", "Resp.Positiva")
+      .ilike("estado", "%cerrado%")
+      .ilike("situacion", "%resp%positiva%")
       .order("numero_reclamo", { ascending: false })
       .limit(2000);
     if (error) throw error;

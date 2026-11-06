@@ -204,8 +204,8 @@ Un reclamo recibe el aviso por WhatsApp **solo si cumple todo esto**:
 
 | Regla | Dónde se controla |
 |---|---|
-| Estado = `Cerrado` | Panel y vista |
-| Situación = `Resp.Positiva` | Panel y vista |
+| Estado = `Cerrado` (sin importar mayúsculas, espacios ni puntos) | Panel y vista |
+| Situación = `Resp.Positiva` (también vale `Resp. Positiva`, `RESP.POSITIVA`…) | Panel y vista |
 | Motivo = `ALUMBRADO PUBLICO`, `ARBOL` o `LIMPIEZA Y RECOLECCION DOMICILIARIA` (sin importar mayúsculas, acentos ni espacios de más) | Panel y vista |
 | Teléfono válido | Panel (al importar o corregir) y vista |
 | Teléfono fuera de la lista de no elegibles | Panel y vista |
@@ -462,7 +462,7 @@ Si algún día se usa otro hosting: `npm run build` genera la carpeta `dist/`. H
 | Problema | Causa probable | Qué hacer |
 |---|---|---|
 | "No se pudo reconocer el formato del archivo" | El archivo no tiene la columna **Nro. Reclamo** | Exportarlo de nuevo del sistema, sin modificarlo. |
-| Todos los reclamos dan "No elegible" | El motivo viene escrito distinto | Revisar los motivos con la consulta de la [sección 4](#4-cómo-agregar-o-quitar-un-motivo). |
+| Reclamos que deberían ser elegibles dan "No" | Algún dato viene distinto a lo esperado | En la importación, la columna **WhatsApp** muestra debajo del "No" el motivo (estado, situación, motivo o teléfono). |
 | Al enviar desde el chat: "Failed to fetch" | El workflow **Mensajes del panel** está apagado, o falta CORS | Activarlo. En el nodo `Panel`, *Allowed Origins* = `*` (o el dominio del panel). Usar la URL de **producción**, no la `/webhook-test/`. |
 | "No autorizado. Volvé a iniciar sesión" | Sesión vencida o anon key mal pegada en n8n | Cerrar sesión y volver a entrar; revisar el nodo **Verificar usuario**. |
 | "Pasaron más de 24 hs…" | Ventana cerrada | Mandar una plantilla. |

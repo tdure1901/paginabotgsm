@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Pencil, Trash2, UploadCloud, X, PhoneOff, Wand2, Ban } from "lucide-react";
 import { PageHeader } from "../components/ui";
-import { MOTIVOS_ELEGIBLES, analizar, conExclusiones, corregirTelefono, esCandidato, leerArchivo, quitarFilas, sugerirTelefono, type Analisis, type FilaAnalizada } from "../lib/importacion";
+import { MOTIVOS_ELEGIBLES, motivoNoElegible, analizar, conExclusiones, corregirTelefono, esCandidato, leerArchivo, quitarFilas, sugerirTelefono, type Analisis, type FilaAnalizada } from "../lib/importacion";
 import { agregarExclusion, importarReclamos, type ResultadoImport } from "../lib/api";
 import { useDatos } from "../lib/useDatos";
 import { buscarExistentes } from "../lib/consultas";
@@ -340,7 +340,22 @@ export default function CargaPage() {
                         <td className="px-3 py-2 text-xs whitespace-nowrap text-slate-600">
                           {v(f.data?.estado)} · {v(f.data?.situacion)}
                         </td>
-                        <td className="px-3 py-2 text-xs">{f.data ? (f.data.whatsapp_eligible ? <span className="font-medium text-brand-700">Sí</span> : <span className="text-slate-400">No</span>) : "—"}</td>
+                        <td className="max-w-56 px-3 py-2 text-xs">
+                          {f.data ? (
+                            f.data.whatsapp_eligible ? (
+                              <span className="font-medium text-brand-700">Sí</span>
+                            ) : (
+                              <span className="text-slate-400">
+                                No
+                                <span className="block text-[11px] leading-tight text-slate-400">
+                                  {motivoNoElegible(f.data, { normalizado: f.data.telefono_normalizado, valido: f.data.telefono_valido }, analisis.exclusiones)}
+                                </span>
+                              </span>
+                            )
+                          ) : (
+                            "—"
+                          )}
+                        </td>
                         <td className="min-w-56 px-3 py-2 text-xs text-amber-700">{f.advertencias.join(" · ")}</td>
                         <td className="px-3 py-2">
                           {f.data?.telefono_valido && !mapaExcl.has(f.data.telefono_normalizado!) && (

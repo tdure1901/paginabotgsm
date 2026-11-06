@@ -201,9 +201,36 @@ export function motivoElegible(motivo: string | null) {
   return MOTIVOS_ELEGIBLES.map(normalizarMotivo).includes(normalizarMotivo(motivo));
 }
 
+/** Para comparar textos del sistema sin depender de mayúsculas, acentos, espacios ni puntos */
+const comparable = (x: string | null) => normalizarMotivo(x).replace(/[\s.]/g, "");
+const ESTADO_OK = "CERRADO";
+const SITUACION_OK = "RESPPOSITIVA"; // "Resp.Positiva", "Resp. Positiva", "RESP.POSITIVA"…
+
+export function estadoOk(estado: string | null) {
+  return comparable(estado) === ESTADO_OK;
+}
+export function situacionOk(situacion: string | null) {
+  return comparable(situacion) === SITUACION_OK;
+}
+
 /** El reclamo está en condiciones de recibir el aviso (sin mirar el teléfono) */
 export function esCandidato(estado: string | null, situacion: string | null, motivo: string | null) {
-  return (estado ?? "").trim() === "Cerrado" && (situacion ?? "").trim() === "Resp.Positiva" && motivoElegible(motivo);
+  return estadoOk(estado) && situacionOk(situacion) && motivoElegible(motivo);
+}
+
+/** Por qué un reclamo NO es elegible (para mostrarlo en la importación). null si es elegible. */
+export function motivoNoElegible(
+  r: { estado: string | null; situacion: string | null; motivo: string | null },
+  tel: { normalizado: string | null; valido: boolean },
+  exclusiones?: Exclusiones,
+): string | null {
+  const razones: string[] = [];
+  if (!estadoOk(r.estado)) razones.push(`Estado "${r.estado ?? ""}"`);
+  if (!situacionOk(r.situacion)) razones.push(`Situación "${r.situacion ?? ""}"`);
+  if (!motivoElegible(r.motivo)) razones.push(`Motivo "${r.motivo ?? ""}" no habilitado`);
+  if (!tel.valido) razones.push("Teléfono inválido");
+  else if (tel.normalizado && exclusiones?.has(tel.normalizado)) razones.push("Número en lista de no elegibles");
+  return razones.length ? razones.join(" · ") : null;
 }
 
 /**
