@@ -2,7 +2,6 @@ import { NavLink, Outlet } from "react-router-dom";
 import { BarChart3, MessagesSquare, UploadCloud, Bot, FlaskConical, LogOut, AlertTriangle, Phone } from "lucide-react";
 import { MODO_DEMO, salir } from "../lib/api";
 import { useDatos } from "../lib/useDatos";
-import { esCandidato } from "../lib/importacion";
 
 const NAV = [
   { to: "/carga", label: "Carga de datos", icon: UploadCloud },
@@ -12,9 +11,9 @@ const NAV = [
 ];
 
 export default function Layout({ email }: { email?: string }) {
-  const { reclamos, noLeidos: nl, error, ultimaNotif } = useDatos();
-  const noLeidos = reclamos.reduce((a, r) => a + nl(r.id), 0);
-  const telMalos = reclamos.filter((r) => !r.telefono_valido && esCandidato(r.estado, r.situacion, r.motivo) && !ultimaNotif.has(r.id)).length;
+  const { recientes, noLeido, error, telInvalidos } = useDatos();
+  const noLeidos = recientes.filter(noLeido).length;
+  const telMalos = telInvalidos.length;
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">

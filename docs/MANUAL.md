@@ -106,11 +106,15 @@ Los usuarios se crean en Supabase → **Authentication → Users → Add user**.
 
 **Menú: Monitoreo**
 
+**Período:** arriba a la derecha elegís qué reclamos se analizan, según su **fecha de ingreso**: últimos 30 días, 3 meses (por defecto), 6 meses, último año o todo. El panel recuerda la elección.
+
+> 💡 Mientras más corto el período, más rápido carga. Usá **Todo** solo cuando lo necesites: con muchos reclamos tarda más y consume más datos de Supabase.
+
 **Indicadores**
 
 | Indicador | Qué cuenta |
 |---|---|
-| Reclamos cargados | Todos los reclamos de la base. |
+| Reclamos del período | Reclamos ingresados en el período elegido. |
 | Elegibles para WhatsApp | Reclamos que cumplen las reglas. |
 | Enviados | Reclamos con al menos un aviso enviado. Debajo: elegibles todavía sin enviar. |
 | Tasa de respuesta | Respondieron ÷ enviados. |
@@ -142,8 +146,10 @@ Los usuarios se crean en Supabase → **Authentication → Users → Add user**.
 
 **Menú: Conversaciones**
 
-- A la izquierda están los chats, del más reciente al más viejo. El globito verde indica mensajes **no leídos**.
-- Filtros: Todas, No leídas, Respondió NO, Respondió SÍ, Otra respuesta, Esperando.
+- A la izquierda están los **100 chats más recientes**, del más nuevo al más viejo. El punto verde indica mensajes **no leídos**.
+- Para encontrar un chat más viejo, usá el **buscador** (nombre, teléfono o Nro. de reclamo) o los filtros: la búsqueda se hace en toda la base, no solo en los 100 que se ven.
+- Filtros: Todas, No leídas, **Sin contestar** (el último mensaje es del vecino), Respondió NO, Respondió SÍ, Otra respuesta, Esperando.
+- También podés abrir cualquier chat desde Monitoreo → ficha del reclamo → **Abrir conversación**.
 - En el chat:
   - 🤖 **Bot** (verde claro): mensajes automáticos.
   - 👤 **Operador** (verde oscuro): mensajes escritos desde el panel, con el email de quien los mandó.
@@ -454,6 +460,7 @@ Genera la carpeta `dist/`, que se puede subir a cualquier hosting estático (Ver
 | El vecino respondió pero no aparece | El workflow **Respuestas-bot** está apagado, o la notificación no tiene `telefono_destino` | Revisar **Executions** en n8n. |
 | Mensajes que no aparecen en el chat pero sí llegaron | La credencial de Supabase en n8n no es la service_role | Cambiarla. |
 | n8n: "Could not find the 'x' column of '…' in the schema cache" | Falta esa columna, o Supabase no refrescó las columnas | Volver a ejecutar el `.sql` correspondiente (se puede correr varias veces). Termina con `notify pgrst, 'reload schema';`, que refresca las columnas. |
+| Conversaciones dice "Falta crear la vista de conversaciones" | No se ejecutó el SQL | Ejecutar `supabase/conversaciones.sql`. |
 | La pantalla dice "Falta crear la tabla…" | No se ejecutó el SQL | Ejecutar `supabase/chat.sql` o `supabase/exclusiones.sql`. |
 | Al recargar una página del panel da 404 | Falta la regla de rutas del hosting | Ver [Publicar](#publicar). |
 
@@ -471,6 +478,8 @@ Para cualquier error de n8n: **Executions** → abrir la ejecución en rojo → 
 | `src/lib/api.ts` | Conexión con Supabase y n8n. |
 | `src/pages/` | Una pantalla por sección. |
 | `supabase/chat.sql` | Tabla `whatsapp_mensajes` y vista `ultima_notificacion_por_telefono`. |
+| `supabase/conversaciones.sql` | Vista `conversaciones` (un chat por fila, para la lista de los 100 más recientes) e índices. |
+| `src/lib/consultas.ts` | Todas las lecturas de la base: período de Monitoreo, límite de chats, consultas puntuales. |
 | `supabase/exclusiones.sql` | Tabla `whatsapp_exclusiones` (no elegibles). |
 | `supabase/vista_reclamos_para_notificar.sql` | **Vista con las reglas** que lee n8n. |
 | `n8n/*.json` | Los 3 workflows (sin credenciales). Si los modificás en n8n, exportalos y actualizá estos archivos para tener copia. |

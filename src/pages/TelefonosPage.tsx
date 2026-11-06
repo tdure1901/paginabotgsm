@@ -1,16 +1,18 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Ban, Loader2, PhoneOff, Plus, Trash2 } from "lucide-react";
 import { PageHeader, Vacio } from "../components/ui";
 import { useDatos } from "../lib/useDatos";
 import { actualizarTelefono, agregarExclusion, quitarExclusion } from "../lib/api";
-import { categoria, fecha, nombreLindo, telefonoLindo } from "../lib/format";
-import { esCandidato, normalizarTelefono } from "../lib/importacion";
+import { fecha, nombreLindo, telefonoLindo } from "../lib/format";
+import { reclamosPorTelefonos } from "../lib/consultas";
+import type { Reclamo } from "../lib/types";
+import { normalizarTelefono } from "../lib/importacion";
 import { FilaTelefono } from "./CargaPage";
 
 type Tab = "invalidos" | "excluidos";
 
 export default function TelefonosPage() {
-  const { reclamos, exclusiones, ultimaNotif, recargar, exclusionesDisponible } = useDatos();
+  const { telInvalidos: invalidos, exclusiones, recargar, exclusionesDisponible, versionChat } = useDatos();
   const [tab, setTab] = useState<Tab>("invalidos");
   const [q, setQ] = useState("");
   const [error, setError] = useState("");
@@ -19,33 +21,41 @@ export default function TelefonosPage() {
   const [guardando, setGuardando] = useState(false);
 
   const setExcl = useMemo(() => new Set(exclusiones.map((e) => e.telefono)), [exclusiones]);
+  const telNuevo = normalizarTelefono(nuevoTel);
 
-  // Reclamos que cumplen las reglas salvo por el teléfono, y que todavía no se avisaron (o el envío falló)
-  const invalidos = useMemo(
-    () =>
-      reclamos.filter((r) => {
-        if (r.telefono_valido || !esCandidato(r.estado, r.situacion, r.motivo)) return false;
-        const n = ultimaNotif.get(r.id);
-        return !n || ["pendiente", "error"].includes((n.estado ?? "").toLowerCase()) || categoria(n) === "error";
-      }),
-    [reclamos, ultimaNotif],
+  // A quién pertenece cada número de la lista (y el que se está por agregar): se consulta solo eso
+  const telsConsulta = useMemo(
+    () => [...new Set([...exclusiones.map((e) => e.telefono), ...(telNuevo.valido ? [telNuevo.normalizado!] : [])])].sort(),
+    [exclusiones, telNuevo.valido, telNuevo.normalizado],
   );
+  const [duenios, setDuenios] = useState<Reclamo[]>([]);
+  useEffect(() => {
+    let vigente = true;
+    const t = setTimeout(() => {
+      reclamosPorTelefonos(telsConsulta)
+        .then((r) => vigente && setDuenios(r))
+        .catch(() => {});
+    }, 300);
+    return () => {
+      vigente = false;
+      clearTimeout(t);
+    };
+  }, [telsConsulta.join(","), versionChat]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const porTelefono = useMemo(() => {
-    const m = new Map<string, typeof reclamos>();
-    for (const r of reclamos) {
+    const m = new Map<string, Reclamo[]>();
+    for (const r of duenios) {
       if (!r.telefono_normalizado) continue;
       if (!m.has(r.telefono_normalizado)) m.set(r.telefono_normalizado, []);
       m.get(r.telefono_normalizado)!.push(r);
     }
     return m;
-  }, [reclamos]);
+  }, [duenios]);
 
   const s = q.toLowerCase();
   const invVisibles = invalidos.filter((r) => !q || [r.solicitante, r.numero_reclamo, r.telefono_original].some((x) => x?.toLowerCase().includes(s)));
   const exVisibles = exclusiones.filter((e) => !q || [e.telefono, e.motivo, ...(porTelefono.get(e.telefono) ?? []).map((r) => r.solicitante)].some((x) => x?.toLowerCase().includes(s)));
 
-  const telNuevo = normalizarTelefono(nuevoTel);
   const coincidencias = telNuevo.valido ? porTelefono.get(telNuevo.normalizado!) ?? [] : [];
 
   async function agregar() {
@@ -179,7 +189,7 @@ export default function TelefonosPage() {
                             onClick={async () => {
                               if (!confirm(`¿Quitar ${telefonoLindo(e.telefono)} de la lista? Sus reclamos que cumplan las reglas van a volver a la cola del bot.`)) return;
                               try {
-                                await quitarExclusion(e.telefono, reclamos);
+                                await quitarExclusion(e.telefono, porTelefono.get(e.telefono) ?? []);
                                 await recargar();
                               } catch (err) {
                                 setError(err instanceof Error ? err.message : String(err));

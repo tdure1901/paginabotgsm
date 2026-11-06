@@ -1,12 +1,14 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Ban, Clock, Download, FileText, MessageCircle, RefreshCw, Search, Send, ThumbsDown, ThumbsUp, Users, X, MapPin, Phone, Percent } from "lucide-react";
+import { Ban, CalendarDays, Clock, Download, FileText, MessageCircle, RefreshCw, Search, Send, ThumbsDown, ThumbsUp, Users, X, MapPin, Phone, Percent } from "lucide-react";
 import { EstadoBadge, PageHeader, Vacio } from "../components/ui";
 import { useDatos } from "../lib/useDatos";
 import { ESTADOS, estadoReclamo, fecha, fechaHora, hora, nombreLindo, telefonoLindo, v, type EstadoVisible } from "../lib/format";
 import type { Notificacion, Reclamo } from "../lib/types";
 import { agregarExclusion } from "../lib/api";
+import { PERIODOS, type Periodo } from "../lib/consultas";
+import { useFicha } from "../lib/useFicha";
 import { ModalExclusion } from "./CargaPage";
 
 function Kpi({ label, valor, sub, icon: Icon, color }: { label: string; valor: number | string; sub?: string; icon: typeof Send; color: string }) {
@@ -49,7 +51,7 @@ function exportarCSV(filas: Fila[]) {
 type Alcance = "enviados" | "elegibles" | "todos";
 
 export default function MonitoreoPage() {
-  const { reclamos, notificaciones, ultimaNotif, hilos, recargar, cargando, actualizado, exclusiones } = useDatos();
+  const { reclamos, notificaciones, ultimaNotif, recargar, cargando, actualizado, exclusiones, periodo, setPeriodo } = useDatos();
   const [excluyendo, setExcluyendo] = useState<{ tel: string; nombre: string; motivo: string } | null>(null);
   const [q, setQ] = useState("");
   const [alcance, setAlcance] = useState<Alcance>("enviados");
@@ -130,7 +132,10 @@ export default function MonitoreoPage() {
     .sort((a, b) => (b.n?.created_at ?? "").localeCompare(a.n?.created_at ?? "") || b.r.numero_reclamo.localeCompare(a.r.numero_reclamo));
 
   const sel = selId ? todas.find((f) => f.r.id === selId) : undefined;
-  const hiloSel = sel ? hilos.get(sel.r.id) ?? [] : [];
+  // Los textos largos y el chat se traen solo al abrir la ficha
+  const ficha = useFicha(selId);
+  const rc = ficha.reclamo ?? sel?.r;
+  const hiloSel = ficha.hilo;
 
   return (
     <>
@@ -138,14 +143,26 @@ export default function MonitoreoPage() {
         title="Monitoreo WhatsApp"
         subtitle={`Envíos del bot y respuestas de los vecinos${actualizado ? ` · actualizado ${hora(actualizado)}` : ""}`}
         actions={
-          <button className="btn-ghost" onClick={recargar}>
-            <RefreshCw size={16} className={cargando ? "animate-spin" : ""} /> Actualizar
-          </button>
+          <>
+            <label className="flex items-center gap-2 text-sm text-slate-500">
+              <CalendarDays size={16} />
+              <select className="input w-auto py-1.5" value={periodo} onChange={(e) => setPeriodo(e.target.value as Periodo)} title="Reclamos ingresados en este período">
+                {PERIODOS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button className="btn-ghost" onClick={recargar}>
+              <RefreshCw size={16} className={cargando ? "animate-spin" : ""} /> Actualizar
+            </button>
+          </>
         }
       />
       <div className="space-y-6 p-4 md:p-8">
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Kpi label="Reclamos cargados" valor={reclamos.length} icon={FileText} color="#475569" />
+          <Kpi label="Reclamos del período" valor={reclamos.length} icon={FileText} color="#475569" />
           <Kpi label="Elegibles para WhatsApp" valor={k.elegibles} sub={`${pct(k.elegibles, reclamos.length)} del total`} icon={Users} color="#0891b2" />
           <Kpi label="Enviados" valor={k.enviados} sub={`${k.c.no_enviado} elegibles sin enviar`} icon={Send} color="#0f766e" />
           <Kpi label="Tasa de respuesta" valor={pct(k.respondidos, k.enviados)} sub={`${k.respondidos} respondieron`} icon={Percent} color="#7c3aed" />
@@ -291,17 +308,17 @@ export default function MonitoreoPage() {
         </div>
       </div>
 
-      {sel && (
+      {sel && rc && (
         <div className="fixed inset-0 z-40 flex justify-end bg-slate-900/30" onClick={() => setSelId(null)}>
           <aside className="flex h-full w-full max-w-lg flex-col bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start gap-3 border-b border-slate-200 p-5">
               <div className="min-w-0 flex-1">
-                <div className="font-mono text-xs text-slate-500">Reclamo {sel.r.numero_reclamo}</div>
-                <h2 className="text-lg font-semibold text-slate-900">{nombreLindo(sel.r.solicitante)}</h2>
+                <div className="font-mono text-xs text-slate-500">Reclamo {rc.numero_reclamo}</div>
+                <h2 className="text-lg font-semibold text-slate-900">{nombreLindo(rc.solicitante)}</h2>
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   <EstadoBadge estado={sel.est} />
-                  {sel.r.whatsapp_eligible && <span className="rounded-full bg-cyan-50 px-2 py-0.5 text-xs font-medium text-cyan-700">Elegible WhatsApp</span>}
-                  {exclusiones.some((e) => e.telefono === sel.r.telefono_normalizado) && (
+                  {rc.whatsapp_eligible && <span className="rounded-full bg-cyan-50 px-2 py-0.5 text-xs font-medium text-cyan-700">Elegible WhatsApp</span>}
+                  {exclusiones.some((e) => e.telefono === rc.telefono_normalizado) && (
                     <span className="rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700">
                       <Ban size={11} className="mr-0.5 inline" /> Número no elegible
                     </span>
@@ -315,24 +332,24 @@ export default function MonitoreoPage() {
             <div className="flex-1 space-y-5 overflow-y-auto p-5 text-sm">
               <div className="space-y-1.5 rounded-lg bg-slate-50 p-3">
                 <div className="flex items-center gap-2">
-                  <Phone size={14} className="text-slate-400" /> {telefonoLindo(sel.r.telefono_normalizado)}
-                  {sel.r.telefono_original && <span className="text-xs text-slate-400">(original: {sel.r.telefono_original})</span>}
+                  <Phone size={14} className="text-slate-400" /> {telefonoLindo(rc.telefono_normalizado)}
+                  {rc.telefono_original && <span className="text-xs text-slate-400">(original: {rc.telefono_original})</span>}
                 </div>
                 <div className="flex items-center gap-2">
-                  <MapPin size={14} className="text-slate-400" /> {[sel.r.calle, sel.r.numero_domicilio].filter(Boolean).join(" ") || "—"}
-                  {sel.r.localidad && <span className="text-slate-400">· {sel.r.localidad}</span>}
+                  <MapPin size={14} className="text-slate-400" /> {[rc.calle, rc.numero_domicilio].filter(Boolean).join(" ") || "—"}
+                  {rc.localidad && <span className="text-slate-400">· {rc.localidad}</span>}
                 </div>
               </div>
               <dl className="grid grid-cols-[130px_1fr] gap-x-3 gap-y-1.5">
                 {(
                   [
-                    ["Motivo", sel.r.motivo],
-                    ["Submotivo", sel.r.submotivo],
-                    ["Estado", sel.r.estado],
-                    ["Situación", sel.r.situacion],
-                    ["Fecha ingreso", fechaHora(sel.r.fecha_ingreso)],
-                    ["Fecha respuesta", fechaHora(sel.r.fecha_respuesta)],
-                    ["Verificación", [sel.r.estado_verificacion, sel.r.resultado_verificacion].filter(Boolean).join(" · ") || null],
+                    ["Motivo", rc.motivo],
+                    ["Submotivo", rc.submotivo],
+                    ["Estado", rc.estado],
+                    ["Situación", rc.situacion],
+                    ["Fecha ingreso", fechaHora(rc.fecha_ingreso)],
+                    ["Fecha respuesta", fechaHora(rc.fecha_respuesta)],
+                    ["Verificación", [rc.estado_verificacion, rc.resultado_verificacion].filter(Boolean).join(" · ") || null],
                   ] as [string, string | null][]
                 ).map(([l, val]) => (
                   <div key={l} className="contents">
@@ -341,16 +358,16 @@ export default function MonitoreoPage() {
                   </div>
                 ))}
               </dl>
-              {sel.r.texto_reclamo && (
+              {rc.texto_reclamo && (
                 <div>
                   <div className="mb-1 text-xs font-medium text-slate-500 uppercase">Texto del reclamo</div>
-                  <p className="rounded-lg bg-slate-50 p-3 whitespace-pre-wrap text-slate-700">{sel.r.texto_reclamo}</p>
+                  <p className="rounded-lg bg-slate-50 p-3 whitespace-pre-wrap text-slate-700">{rc.texto_reclamo}</p>
                 </div>
               )}
-              {sel.r.texto_respuesta && (
+              {rc.texto_respuesta && (
                 <div>
                   <div className="mb-1 text-xs font-medium text-slate-500 uppercase">Respuesta del municipio</div>
-                  <p className="rounded-lg bg-slate-50 p-3 whitespace-pre-wrap text-slate-700">{sel.r.texto_respuesta}</p>
+                  <p className="rounded-lg bg-slate-50 p-3 whitespace-pre-wrap text-slate-700">{rc.texto_respuesta}</p>
                 </div>
               )}
               <div>
@@ -369,16 +386,16 @@ export default function MonitoreoPage() {
               </div>
             </div>
             <div className="flex gap-2 border-t border-slate-200 p-4">
-              {sel.r.telefono_valido && !exclusiones.some((e) => e.telefono === sel.r.telefono_normalizado) && (
+              {rc.telefono_valido && !exclusiones.some((e) => e.telefono === rc.telefono_normalizado) && (
                 <button
                   className="btn-ghost text-rose-600"
                   title="No avisar nunca a este número"
-                  onClick={() => setExcluyendo({ tel: sel.r.telefono_normalizado!, nombre: nombreLindo(sel.r.solicitante), motivo: "" })}
+                  onClick={() => setExcluyendo({ tel: rc.telefono_normalizado!, nombre: nombreLindo(rc.solicitante), motivo: "" })}
                 >
                   <Ban size={16} /> No avisar
                 </button>
               )}
-              <Link to={`/conversaciones/${sel.r.id}`} className="btn-primary flex-1">
+              <Link to={`/conversaciones/${rc.id}`} className="btn-primary flex-1">
                 <MessageCircle size={16} /> Abrir conversación
               </Link>
             </div>

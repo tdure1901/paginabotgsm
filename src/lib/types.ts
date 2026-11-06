@@ -63,3 +63,21 @@ export interface Exclusion {
   created_at: string;
   creado_por: string | null;
 }
+
+/** Fila de la vista `conversaciones`: un chat con su último mensaje */
+export interface Conversacion {
+  reclamo_id: string;
+  numero_reclamo: string;
+  solicitante: string | null;
+  telefono_normalizado: string | null;
+  motivo: string | null;
+  submotivo: string | null;
+  ultima_fecha: string;
+  ultimo_contenido: string | null;
+  ultima_direccion: "saliente" | "entrante";
+  ultimo_origen: "bot" | "operador" | "vecino";
+  ultima_entrada: string | null;
+  notif_estado: string | null;
+  notif_respuesta: string | null;
+  categoria: "pendiente" | "si" | "no" | "sin_respuesta" | "respondido_otro" | "error" | "otro" | null;
+}

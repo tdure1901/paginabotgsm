@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Bot, FileText, MapPin, Phone, Search, SendHorizontal, UserRound } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Bot, FileText, Loader2, MapPin, Phone, Search, SendHorizontal, UserRound } from "lucide-react";
 import { Avatar, EstadoBadge, Vacio } from "../components/ui";
+import Composer from "../components/Composer";
 import { useDatos } from "../lib/useDatos";
+import { useFicha } from "../lib/useFicha";
 import { ESTADOS, estadoReclamo, fechaHora, hora, nombreLindo, telefonoLindo, v, type EstadoVisible } from "../lib/format";
 import { CHAT_MANUAL_HABILITADO } from "../lib/api";
-import Composer from "../components/Composer";
+import { cargarConversaciones, LIMITE_CONVERSACIONES, type FiltroConv } from "../lib/consultas";
+import type { Conversacion } from "../lib/types";
 
-type Filtro = "todas" | "no_leidas" | EstadoVisible;
+type Filtro = FiltroConv | "no_leidas";
 const FILTROS: { k: Filtro; label: string }[] = [
   { k: "todas", label: "Todas" },
   { k: "no_leidas", label: "No leídas" },
+  { k: "sin_contestar", label: "Sin contestar" },
   { k: "no", label: "Respondió NO" },
   { k: "si", label: "Respondió SÍ" },
   { k: "respondido_otro", label: "Otra respuesta" },
@@ -24,54 +28,78 @@ function diaSeparador(iso: string) {
   return d.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" });
 }
 
+/** Texto corto del último mensaje para la lista */
+function vistaPrevia(c: Conversacion) {
+  const pre = c.ultima_direccion === "saliente" ? (c.ultimo_origen === "bot" ? "🤖 " : "Vos: ") : "";
+  return pre + (c.ultimo_contenido ?? "");
+}
+
 export default function ConversacionesPage() {
   const { reclamoId } = useParams();
   const navigate = useNavigate();
-  const { reclamos, hilos, ultimaNotif, noLeidos, ultimaEntrada, verConversacion, recargar, chatDisponible } = useDatos();
-  const [q, setQ] = useState("");
+  const { recientes, conversacionesDisponible, noLeido, verConversacion, versionChat, refrescarChats } = useDatos();
   const [filtro, setFiltro] = useState<Filtro>("todas");
+  const [q, setQ] = useState("");
+  const [qDebounced, setQDebounced] = useState("");
+  const [lista, setLista] = useState<Conversacion[] | null>(null);
+  const [buscando, setBuscando] = useState(false);
+  const [errorLista, setErrorLista] = useState("");
   const finRef = useRef<HTMLDivElement>(null);
 
-  const conversaciones = useMemo(
-    () =>
-      reclamos
-        .filter((r) => hilos.has(r.id) || r.id === reclamoId)
-        .map((r) => {
-          const h = hilos.get(r.id) ?? [];
-          return { r, ultimo: h[h.length - 1], nl: noLeidos(r.id), est: estadoReclamo(r, ultimaNotif.get(r.id)) };
-        })
-        .filter(({ r, nl, est }) => {
-          if (filtro === "no_leidas" && !nl) return false;
-          if (filtro !== "todas" && filtro !== "no_leidas" && est !== filtro) return false;
-          if (q) {
-            const s = q.toLowerCase();
-            return [r.solicitante, r.telefono_normalizado, r.numero_reclamo].some((x) => x?.toLowerCase().includes(s));
-          }
-          return true;
-        })
-        .sort((a, b) => (b.ultimo?.fecha ?? "").localeCompare(a.ultimo?.fecha ?? "")),
-    [reclamos, hilos, ultimaNotif, noLeidos, filtro, q, reclamoId],
-  );
+  // Espera a que se termine de escribir antes de buscar en la base
+  useEffect(() => {
+    const t = setTimeout(() => setQDebounced(q), 350);
+    return () => clearTimeout(t);
+  }, [q]);
 
-  const activo = reclamos.find((r) => r.id === reclamoId) ?? null;
-  const hilo = activo ? hilos.get(activo.id) ?? [] : [];
-  const estActivo = activo ? estadoReclamo(activo, ultimaNotif.get(activo.id)) : null;
+  // Sin filtros se usa la lista que ya está cargada; con filtros o búsqueda se consulta la base (máx. 100)
+  const consultaServidor = (filtro !== "todas" && filtro !== "no_leidas") || !!qDebounced.trim();
+  useEffect(() => {
+    if (!consultaServidor) {
+      setLista(null);
+      return;
+    }
+    let vigente = true;
+    setBuscando(true);
+    cargarConversaciones(filtro as FiltroConv, qDebounced)
+      .then((r) => vigente && (setLista(r.lista), setErrorLista("")))
+      .catch((e) => vigente && setErrorLista(e instanceof Error ? e.message : String(e)))
+      .finally(() => vigente && setBuscando(false));
+    return () => {
+      vigente = false;
+    };
+  }, [consultaServidor, filtro, qDebounced, versionChat]);
+
+  const conversaciones = useMemo(() => {
+    const base = lista ?? recientes;
+    return filtro === "no_leidas" ? base.filter(noLeido) : base;
+  }, [lista, recientes, filtro, noLeido]);
+
+  const ficha = useFicha(reclamoId);
+  const activo = ficha.reclamo;
+  const hilo = ficha.hilo;
+  const estActivo: EstadoVisible | null = activo ? estadoReclamo(activo, ficha.ultimaNotif) : null;
 
   useEffect(() => {
     finRef.current?.scrollIntoView({ block: "end" });
   }, [reclamoId, hilo.length]);
 
+  // Marca como leído al abrir (o cuando llega algo nuevo mientras está abierto)
   useEffect(() => {
-    if (activo && noLeidos(activo.id) > 0) verConversacion(activo.id);
-  }, [activo, noLeidos, verConversacion]);
+    if (reclamoId && ficha.ultimaEntrada) verConversacion(reclamoId);
+  }, [reclamoId, ficha.ultimaEntrada, verConversacion]);
 
   return (
     <div className="flex h-[calc(100vh-108px)] md:h-screen">
-      <section className={`w-full flex-col border-r border-slate-200 bg-white md:flex md:w-80 lg:w-96 ${activo ? "hidden" : "flex"}`}>
+      <section className={`w-full flex-col border-r border-slate-200 bg-white md:flex md:w-80 lg:w-96 ${reclamoId ? "hidden" : "flex"}`}>
         <div className="space-y-3 border-b border-slate-200 p-4">
           <h1 className="text-lg font-semibold text-slate-900">Conversaciones</h1>
           <div className="relative">
-            <Search size={15} className="absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" />
+            {buscando ? (
+              <Loader2 size={15} className="absolute top-1/2 left-2.5 -translate-y-1/2 animate-spin text-slate-400" />
+            ) : (
+              <Search size={15} className="absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" />
+            )}
             <input className="input pl-8" placeholder="Buscar solicitante, teléfono o Nro." value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -86,37 +114,57 @@ export default function ConversacionesPage() {
             ))}
           </div>
         </div>
+        {!conversacionesDisponible && (
+          <div className="m-3 flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+            <AlertTriangle size={15} className="shrink-0" /> Falta crear la vista de conversaciones: ejecutá <code>supabase/conversaciones.sql</code> en Supabase.
+          </div>
+        )}
+        {errorLista && <div className="m-3 text-xs text-rose-600">{errorLista}</div>}
         <ul className="flex-1 divide-y divide-slate-100 overflow-y-auto">
-          {conversaciones.map(({ r, ultimo, nl, est }) => (
-            <li key={r.id}>
-              <button onClick={() => navigate(`/conversaciones/${r.id}`)} className={`flex w-full gap-3 px-4 py-3 text-left transition hover:bg-slate-50 ${r.id === reclamoId ? "bg-brand-50" : ""}`}>
-                <Avatar nombre={nombreLindo(r.solicitante)} size={40} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline gap-2">
-                    <span className={`flex-1 truncate text-sm ${nl ? "font-semibold text-slate-900" : "font-medium text-slate-800"}`}>{nombreLindo(r.solicitante)}</span>
-                    {ultimo && <span className="shrink-0 text-[11px] text-slate-400">{fechaHora(ultimo.fecha)}</span>}
+          {conversaciones.map((c) => {
+            const nl = noLeido(c);
+            const est: EstadoVisible = c.categoria ?? "otro";
+            return (
+              <li key={c.reclamo_id}>
+                <button
+                  onClick={() => navigate(`/conversaciones/${c.reclamo_id}`)}
+                  className={`flex w-full gap-3 px-4 py-3 text-left transition hover:bg-slate-50 ${c.reclamo_id === reclamoId ? "bg-brand-50" : ""}`}
+                >
+                  <Avatar nombre={nombreLindo(c.solicitante)} size={40} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline gap-2">
+                      <span className={`flex-1 truncate text-sm ${nl ? "font-semibold text-slate-900" : "font-medium text-slate-800"}`}>{nombreLindo(c.solicitante)}</span>
+                      <span className="shrink-0 text-[11px] text-slate-400">{fechaHora(c.ultima_fecha)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`flex-1 truncate text-xs ${nl ? "text-slate-700" : "text-slate-500"}`}>{vistaPrevia(c)}</span>
+                      {nl && <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-brand-600" title="No leído" />}
+                    </div>
+                    <div className="mt-1 flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: ESTADOS[est].color }} />
+                      <span className="truncate text-[11px] text-slate-400">
+                        {c.numero_reclamo} · {c.submotivo ?? "—"}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`flex-1 truncate text-xs ${nl ? "text-slate-700" : "text-slate-500"}`}>
-                      {ultimo ? (ultimo.direccion === "saliente" ? (ultimo.origen === "bot" ? "🤖 " : "Vos: ") : "") + ultimo.contenido : "Sin mensajes"}
-                    </span>
-                    {nl > 0 && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-brand-600 px-1 text-[10px] font-semibold text-white">{nl}</span>}
-                  </div>
-                  <div className="mt-1 flex items-center gap-1.5">
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: ESTADOS[est].color }} />
-                    <span className="truncate text-[11px] text-slate-400">
-                      {r.numero_reclamo} · {r.submotivo ?? "—"}
-                    </span>
-                  </div>
-                </div>
-              </button>
-            </li>
-          ))}
-          {!conversaciones.length && <Vacio>No hay conversaciones.</Vacio>}
+                </button>
+              </li>
+            );
+          })}
+          {!conversaciones.length && <Vacio>{q || filtro !== "todas" ? "No hay conversaciones que coincidan." : "No hay conversaciones."}</Vacio>}
         </ul>
+        {conversaciones.length >= LIMITE_CONVERSACIONES && (
+          <div className="border-t border-slate-200 px-4 py-2 text-center text-[11px] text-slate-500">
+            Se muestran los {LIMITE_CONVERSACIONES} chats más recientes. Usá el buscador o los filtros para encontrar otros.
+          </div>
+        )}
       </section>
 
-      {activo ? (
+      {reclamoId && !activo ? (
+        <section className="grid flex-1 place-items-center bg-slate-100 text-slate-400">
+          {ficha.error ? <span className="text-sm text-rose-600">{ficha.error}</span> : <Loader2 className="animate-spin" />}
+        </section>
+      ) : activo ? (
         <section className="flex min-w-0 flex-1 flex-col bg-slate-100">
           <header className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3">
             <button className="text-slate-500 md:hidden" onClick={() => navigate("/conversaciones")}>
@@ -174,18 +222,18 @@ export default function ConversacionesPage() {
 
           <Composer
             reclamo={activo}
-            ultimaEntrada={ultimaEntrada(activo.id)}
+            ultimaEntrada={ficha.ultimaEntrada}
             bloqueo={
               !activo.telefono_valido
                 ? "Este reclamo no tiene un teléfono válido para WhatsApp."
-                : !chatDisponible
+                : !ficha.chatDisponible
                   ? "Para escribir desde el panel falta crear la tabla whatsapp_mensajes en Supabase (ver supabase/chat.sql)."
                   : !CHAT_MANUAL_HABILITADO
                     ? "Para escribir desde el panel falta configurar el webhook de n8n (VITE_N8N_WEBHOOK_MENSAJE)."
                     : null
             }
             onEnviado={async () => {
-              await recargar();
+              refrescarChats();
               verConversacion(activo.id);
             }}
           />

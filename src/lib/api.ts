@@ -11,15 +11,12 @@ export const supabase: SupabaseClient | null = SUPABASE_URL && SUPABASE_KEY ? cr
 export const MODO_DEMO = !supabase;
 export const CHAT_MANUAL_HABILITADO = MODO_DEMO || !!N8N_MENSAJE;
 
-export interface Datos {
+/** Contenido completo del modo demo (se guarda en el navegador) */
+export interface Demo {
   reclamos: Reclamo[];
   notificaciones: Notificacion[];
   mensajes: MensajeChat[];
   exclusiones: Exclusion[];
-  /** false si la tabla whatsapp_mensajes todavía no existe */
-  chatDisponible: boolean;
-  /** false si la tabla whatsapp_exclusiones todavía no existe */
-  exclusionesDisponible: boolean;
 }
 
 /* ---------------- Sesión ---------------- */
@@ -44,9 +41,7 @@ export async function salir() {
 /* ---------------- Modo demo (localStorage) ---------------- */
 
 const LS_KEY = "reclamos-bot-demo-v5";
-type Demo = Omit<Datos, "chatDisponible" | "exclusionesDisponible">;
-
-function leerDemo(): Demo {
+export function leerDemo(): Demo {
   try {
     const raw = localStorage.getItem(LS_KEY);
     if (raw) return { exclusiones: [], ...JSON.parse(raw) } as Demo;
@@ -63,74 +58,6 @@ function guardarDemo(d: Demo) {
   } catch {
     /* ignorar */
   }
-}
-
-/* ---------------- Lectura ---------------- */
-
-const str = <T extends { id: unknown; reclamo_id?: unknown }>(x: T) =>
-  ({ ...x, id: String(x.id), ...(x.reclamo_id !== undefined ? { reclamo_id: String(x.reclamo_id) } : {}) }) as T;
-
-async function traerTodo<T>(tabla: string, orden: string, asc: boolean): Promise<T[]> {
-  const out: T[] = [];
-  const PAG = 1000;
-  for (let desde = 0; ; desde += PAG) {
-    const { data, error } = await supabase!
-      .from(tabla)
-      .select("*")
-      .order(orden, { ascending: asc })
-      .range(desde, desde + PAG - 1);
-    if (error) throw error;
-    out.push(...(data as T[]));
-    if (!data || data.length < PAG) break;
-  }
-  return out;
-}
-
-export async function cargarDatos(): Promise<Datos> {
-  if (!supabase) return { ...leerDemo(), chatDisponible: true, exclusionesDisponible: true };
-  const [reclamos, notificaciones] = await Promise.all([
-    traerTodo<Reclamo>("reclamos", "numero_reclamo", false),
-    traerTodo<Notificacion>("whatsapp_notificaciones", "created_at", true),
-  ]);
-  let mensajes: MensajeChat[] = [];
-  let chatDisponible = true;
-  try {
-    mensajes = await traerTodo<MensajeChat>("whatsapp_mensajes", "created_at", true);
-  } catch {
-    chatDisponible = false; // la tabla del chat todavía no se creó
-  }
-  let exclusiones: Exclusion[] = [];
-  let exclusionesDisponible = true;
-  try {
-    exclusiones = await traerTodo<Exclusion>("whatsapp_exclusiones", "created_at", false);
-  } catch {
-    exclusionesDisponible = false;
-  }
-  return {
-    reclamos: reclamos.map(str),
-    notificaciones: notificaciones.map(str),
-    mensajes: mensajes.map(str),
-    exclusiones,
-    chatDisponible,
-    exclusionesDisponible,
-  };
-}
-
-export function suscribirCambios(onChange: () => void): () => void {
-  if (!supabase) return () => {};
-  let t: ReturnType<typeof setTimeout> | undefined;
-  const debounced = () => {
-    clearTimeout(t);
-    t = setTimeout(onChange, 400);
-  };
-  const ch = supabase.channel("panel-reclamos");
-  for (const table of ["reclamos", "whatsapp_notificaciones", "whatsapp_mensajes", "whatsapp_exclusiones"])
-    ch.on("postgres_changes", { event: "*", schema: "public", table }, debounced);
-  ch.subscribe();
-  return () => {
-    clearTimeout(t);
-    supabase!.removeChannel(ch);
-  };
 }
 
 /* ---------------- Importación ---------------- */

@@ -4,6 +4,7 @@ import { PageHeader } from "../components/ui";
 import { MOTIVOS_ELEGIBLES, analizar, conExclusiones, corregirTelefono, esCandidato, leerArchivo, quitarFilas, sugerirTelefono, type Analisis, type FilaAnalizada } from "../lib/importacion";
 import { agregarExclusion, importarReclamos, type ResultadoImport } from "../lib/api";
 import { useDatos } from "../lib/useDatos";
+import { buscarExistentes } from "../lib/consultas";
 import { telefonoLindo, v } from "../lib/format";
 import { normalizarTelefono } from "../lib/importacion";
 
@@ -34,7 +35,9 @@ function Stat({ label, valor, tono = "text-slate-900" }: { label: string; valor:
 }
 
 export default function CargaPage() {
-  const { recargar, reclamos, exclusiones } = useDatos();
+  const { recargar, exclusiones } = useDatos();
+  // Nro. de reclamo del archivo que ya están en la base (se consulta solo eso, no toda la tabla)
+  const [existentes, setExistentes] = useState<Set<string>>(new Set());
   const mapaExcl = useMemo(() => new Map(exclusiones.map((e) => [e.telefono, e.motivo ?? ""])), [exclusiones]);
   const [excluyendo, setExcluyendo] = useState<{ tel: string; nombre: string; motivo: string } | null>(null);
   const [verTodosInvalidos, setVerTodosInvalidos] = useState(false);
@@ -49,7 +52,6 @@ export default function CargaPage() {
   const [error, setError] = useState("");
   const [resultado, setResultado] = useState<ResultadoImport | null>(null);
 
-  const existentes = useMemo(() => new Set(reclamos.map((r) => r.numero_reclamo)), [reclamos]);
 
   async function procesar(file: File) {
     setLeyendo(true);
@@ -58,8 +60,13 @@ export default function CargaPage() {
     try {
       const { rows, filas } = await leerArchivo(file);
       setArchivo(file);
+      // 1) Primer análisis para obtener los Nro. de reclamo ya normalizados
+      const previo = analizar(rows, filas, mapaExcl);
+      // 2) Se consulta cuáles ya existen y con qué teléfono, para no pisar teléfonos corregidos
+      const ex = await buscarExistentes(previo.validos.map((r) => r.numero_reclamo));
+      setExistentes(new Set(ex.keys()));
       const enBase = new Map(
-        reclamos.filter((r) => r.telefono_valido && r.telefono_normalizado).map((r) => [r.numero_reclamo, { original: r.telefono_original, normalizado: r.telefono_normalizado! }]),
+        [...ex.values()].filter((r) => r.telefono_valido && r.telefono_normalizado).map((r) => [r.numero_reclamo, { original: r.telefono_original, normalizado: r.telefono_normalizado! }]),
       );
       setAnalisis(analizar(rows, filas, mapaExcl, enBase));
       setFiltro("todos");
