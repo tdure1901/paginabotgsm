@@ -1,4 +1,4 @@
-import type { MensajeChat, Notificacion, Reclamo } from "./types";
+import type { Exclusion, MensajeChat, Notificacion, Reclamo } from "./types";
 
 const NOMBRES = ["GONZALEZ MARIA", "PEREZ JUAN CARLOS", "FERNANDEZ LUCIA", "RODRIGUEZ CARLOS", "LOPEZ ANA", "MARTINEZ DIEGO", "GOMEZ SOFIA", "DIAZ MARTIN", "ROMERO VALENTINA", "SOSA PABLO", "TORRES CAMILA", "ALVAREZ FEDERICO", "RUIZ JULIETA", "BENITEZ SANTIAGO", "ACOSTA FLORENCIA", "MEDINA NICOLAS", "HERRERA AGUSTINA", "CASTRO MATIAS", "SUAREZ ROCIO", "MOLINA GONZALO", "ORTIZ CARLA", "SILVA HERNAN", "ROJAS PAULA", "VEGA EMILIANO", "NUÑEZ LAURA", "CABRERA JORGE"];
 const SUB = [
@@ -14,7 +14,7 @@ const CALLES = ["MITRE", "SAN JUAN", "RIVADAVIA", "BELGRANO", "SARMIENTO", "9 DE
 
 const pick = <T,>(a: T[], i: number) => a[i % a.length];
 
-export function generarDemo(): { reclamos: Reclamo[]; notificaciones: Notificacion[]; mensajes: MensajeChat[] } {
+export function generarDemo(): { reclamos: Reclamo[]; notificaciones: Notificacion[]; mensajes: MensajeChat[]; exclusiones: Exclusion[] } {
   const now = Date.now();
   const reclamos: Reclamo[] = [];
   const notificaciones: Notificacion[] = [];
@@ -90,5 +90,30 @@ export function generarDemo(): { reclamos: Reclamo[]; notificaciones: Notificaci
     if (tipo === "no") msg(new Date(respondido.getTime() + 5 * 6e4), "entrante", "vecino", "Sigue igual, nadie vino a arreglarlo");
   });
 
-  return { reclamos, notificaciones, mensajes };
+  // Algunos reclamos cerrados con teléfono mal cargado, para la sección Teléfonos
+  const malos = ["134554433", "45678912", "15 4433-2211", "011-4455"];
+  malos.forEach((tel, j) => {
+    const base = reclamos[j * 2 + 1];
+    reclamos.push({
+      ...base,
+      id: crypto.randomUUID(),
+      numero_reclamo: `2026-${49001 + j}`,
+      solicitante: ["QUIROGA MARTA", "LEDESMA RAUL", "PAZ GRACIELA", "IBARRA OSCAR"][j],
+      estado: "Cerrado",
+      situacion: "Resp.Positiva",
+      telefono_original: tel,
+      telefono_normalizado: null,
+      telefono_valido: false,
+      whatsapp_eligible: false,
+    });
+  });
+  // Un director que cargó un reclamo con su teléfono
+  const director = reclamos[25];
+  director.solicitante = "FERREYRA JORGE (DIR. ALUMBRADO)";
+  director.whatsapp_eligible = false;
+  const exclusiones: Exclusion[] = [
+    { telefono: director.telefono_normalizado!, motivo: "Director de Alumbrado", created_at: new Date(now - 30 * 864e5).toISOString(), creado_por: "demo" },
+  ];
+
+  return { reclamos, notificaciones, mensajes, exclusiones };
 }

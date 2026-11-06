@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Clock, Download, FileText, MessageCircle, RefreshCw, Search, Send, ThumbsDown, ThumbsUp, Users, X, MapPin, Phone, Percent } from "lucide-react";
+import { Ban, Clock, Download, FileText, MessageCircle, RefreshCw, Search, Send, ThumbsDown, ThumbsUp, Users, X, MapPin, Phone, Percent } from "lucide-react";
 import { EstadoBadge, PageHeader, Vacio } from "../components/ui";
 import { useDatos } from "../lib/useDatos";
 import { ESTADOS, estadoReclamo, fecha, fechaHora, hora, nombreLindo, telefonoLindo, v, type EstadoVisible } from "../lib/format";
 import type { Notificacion, Reclamo } from "../lib/types";
+import { agregarExclusion } from "../lib/api";
+import { ModalExclusion } from "./CargaPage";
 
 function Kpi({ label, valor, sub, icon: Icon, color }: { label: string; valor: number | string; sub?: string; icon: typeof Send; color: string }) {
   return (
@@ -47,7 +49,8 @@ function exportarCSV(filas: Fila[]) {
 type Alcance = "enviados" | "elegibles" | "todos";
 
 export default function MonitoreoPage() {
-  const { reclamos, notificaciones, ultimaNotif, hilos, recargar, cargando, actualizado } = useDatos();
+  const { reclamos, notificaciones, ultimaNotif, hilos, recargar, cargando, actualizado, exclusiones } = useDatos();
+  const [excluyendo, setExcluyendo] = useState<{ tel: string; nombre: string; motivo: string } | null>(null);
   const [q, setQ] = useState("");
   const [alcance, setAlcance] = useState<Alcance>("enviados");
   const [fEstado, setFEstado] = useState<EstadoVisible | "">("");
@@ -298,6 +301,11 @@ export default function MonitoreoPage() {
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   <EstadoBadge estado={sel.est} />
                   {sel.r.whatsapp_eligible && <span className="rounded-full bg-cyan-50 px-2 py-0.5 text-xs font-medium text-cyan-700">Elegible WhatsApp</span>}
+                  {exclusiones.some((e) => e.telefono === sel.r.telefono_normalizado) && (
+                    <span className="rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700">
+                      <Ban size={11} className="mr-0.5 inline" /> Número no elegible
+                    </span>
+                  )}
                 </div>
               </div>
               <button className="text-slate-400 hover:text-slate-700" onClick={() => setSelId(null)}>
@@ -360,13 +368,33 @@ export default function MonitoreoPage() {
                 </div>
               </div>
             </div>
-            <div className="border-t border-slate-200 p-4">
-              <Link to={`/conversaciones/${sel.r.id}`} className="btn-primary w-full">
+            <div className="flex gap-2 border-t border-slate-200 p-4">
+              {sel.r.telefono_valido && !exclusiones.some((e) => e.telefono === sel.r.telefono_normalizado) && (
+                <button
+                  className="btn-ghost text-rose-600"
+                  title="No avisar nunca a este número"
+                  onClick={() => setExcluyendo({ tel: sel.r.telefono_normalizado!, nombre: nombreLindo(sel.r.solicitante), motivo: "" })}
+                >
+                  <Ban size={16} /> No avisar
+                </button>
+              )}
+              <Link to={`/conversaciones/${sel.r.id}`} className="btn-primary flex-1">
                 <MessageCircle size={16} /> Abrir conversación
               </Link>
             </div>
           </aside>
         </div>
+      )}
+      {excluyendo && (
+        <ModalExclusion
+          valor={excluyendo}
+          onChange={setExcluyendo}
+          onConfirmar={async () => {
+            await agregarExclusion(excluyendo.tel, excluyendo.motivo);
+            setExcluyendo(null);
+            await recargar();
+          }}
+        />
       )}
     </>
   );

@@ -33,7 +33,7 @@ interface Ctx extends Datos {
 const DatosCtx = createContext<Ctx | null>(null);
 
 export function DatosProvider({ children }: { children: ReactNode }) {
-  const [datos, setDatos] = useState<Datos>({ reclamos: [], notificaciones: [], mensajes: [], chatDisponible: true });
+  const [datos, setDatos] = useState<Datos>({ reclamos: [], notificaciones: [], mensajes: [], exclusiones: [], chatDisponible: true, exclusionesDisponible: true });
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actualizado, setActualizado] = useState<string | null>(null);

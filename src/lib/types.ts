@@ -55,3 +55,11 @@ export interface MensajeChat {
   tipo?: "texto" | "plantilla" | null;
   enviado_por?: string | null;
 }
+
+/** Fila de `whatsapp_exclusiones`: teléfonos a los que nunca se les manda el aviso */
+export interface Exclusion {
+  telefono: string;
+  motivo: string | null;
+  created_at: string;
+  creado_por: string | null;
+}
