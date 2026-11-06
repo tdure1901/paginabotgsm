@@ -1,13 +1,14 @@
+import { motivoElegible } from "./importacion";
 import type { Exclusion, MensajeChat, Notificacion, Reclamo } from "./types";
 
 const NOMBRES = ["GONZALEZ MARIA", "PEREZ JUAN CARLOS", "FERNANDEZ LUCIA", "RODRIGUEZ CARLOS", "LOPEZ ANA", "MARTINEZ DIEGO", "GOMEZ SOFIA", "DIAZ MARTIN", "ROMERO VALENTINA", "SOSA PABLO", "TORRES CAMILA", "ALVAREZ FEDERICO", "RUIZ JULIETA", "BENITEZ SANTIAGO", "ACOSTA FLORENCIA", "MEDINA NICOLAS", "HERRERA AGUSTINA", "CASTRO MATIAS", "SUAREZ ROCIO", "MOLINA GONZALO", "ORTIZ CARLA", "SILVA HERNAN", "ROJAS PAULA", "VEGA EMILIANO", "NUÑEZ LAURA", "CABRERA JORGE"];
 const SUB = [
-  ["Alumbrado", "Luminaria apagada"],
-  ["Vía pública", "Bacheo"],
-  ["Higiene urbana", "Recolección de residuos"],
-  ["Arbolado", "Poda"],
-  ["Hidráulica", "Limpieza de desagües"],
-  ["Tránsito", "Señalización"],
+  ["ALUMBRADO PUBLICO", "Luminaria apagada"],
+  ["ARBOL", "Poda"],
+  ["LIMPIEZA Y RECOLECCION DOMICILIARIA", "Recolección de residuos"],
+  ["ALUMBRADO PUBLICO", "Columna caída"],
+  ["ARBOL", "Extracción"],
+  ["BACHEO", "Pozo en calzada"],
 ];
 const LOCALIDADES = ["Centro", "Villa Nueva", "San Martín", "Los Álamos", "Barrio Norte"];
 const CALLES = ["MITRE", "SAN JUAN", "RIVADAVIA", "BELGRANO", "SARMIENTO", "9 DE JULIO", "MORENO"];
@@ -22,7 +23,7 @@ export function generarDemo(): { reclamos: Reclamo[]; notificaciones: Notificaci
 
   NOMBRES.forEach((nombre, i) => {
     const [motivo, submotivo] = pick(SUB, i * 5);
-    const elegible = i % 9 !== 8;
+    const elegible = i % 9 !== 8 && motivoElegible(motivo);
     const tel = `549341${String(4100000 + i * 37919).slice(0, 7)}`;
     const ingreso = new Date(now - (20 - (i % 7)) * 864e5);
     const r: Reclamo = {

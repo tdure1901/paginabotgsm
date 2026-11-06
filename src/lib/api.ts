@@ -43,7 +43,7 @@ export async function salir() {
 
 /* ---------------- Modo demo (localStorage) ---------------- */
 
-const LS_KEY = "reclamos-bot-demo-v4";
+const LS_KEY = "reclamos-bot-demo-v5";
 type Demo = Omit<Datos, "chatDisponible" | "exclusionesDisponible">;
 
 function leerDemo(): Demo {
@@ -196,26 +196,25 @@ export async function agregarExclusion(telefonoCrudo: string, motivo: string) {
 }
 
 /** Quita un número de la lista y vuelve a habilitar los reclamos que cumplen las reglas */
-export async function quitarExclusion(tel: string) {
+export async function quitarExclusion(tel: string, reclamos: Reclamo[]) {
+  const habilitar = reclamos
+    .filter((r) => r.telefono_normalizado === tel && esElegible(r, { normalizado: tel, valido: r.telefono_valido }))
+    .map((r) => r.id);
   if (!supabase) {
     const d = leerDemo();
     d.exclusiones = d.exclusiones.filter((e) => e.telefono !== tel);
     d.reclamos.forEach((r) => {
-      if (r.telefono_normalizado === tel) r.whatsapp_eligible = esElegible(r.estado, r.situacion, { normalizado: tel, valido: r.telefono_valido });
+      if (habilitar.includes(r.id)) r.whatsapp_eligible = true;
     });
     guardarDemo(d);
     return;
   }
   const { error } = await supabase.from("whatsapp_exclusiones").delete().eq("telefono", tel);
   if (error) throw error;
-  const { error: e2 } = await supabase
-    .from("reclamos")
-    .update({ whatsapp_eligible: true })
-    .eq("telefono_normalizado", tel)
-    .eq("estado", "Cerrado")
-    .eq("situacion", "Resp.Positiva")
-    .eq("telefono_valido", true);
-  if (e2) throw e2;
+  if (habilitar.length) {
+    const { error: e2 } = await supabase.from("reclamos").update({ whatsapp_eligible: true }).in("id", habilitar);
+    if (e2) throw e2;
+  }
 }
 
 /** Corrige el teléfono de un reclamo ya cargado y recalcula si es elegible */
@@ -226,7 +225,7 @@ export async function actualizarTelefono(r: Reclamo, nuevo: string, exclusiones:
     telefono_original: original,
     telefono_normalizado: t.normalizado,
     telefono_valido: t.valido,
-    whatsapp_eligible: esElegible(r.estado, r.situacion, t, new Map([...exclusiones].map((x) => [x, ""]))),
+    whatsapp_eligible: esElegible(r, t, new Map([...exclusiones].map((x) => [x, ""]))),
     updated_at: new Date().toISOString(),
   };
   if (!supabase) {

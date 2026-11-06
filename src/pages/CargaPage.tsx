@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Pencil, Trash2, UploadCloud, X, PhoneOff, Wand2, Ban } from "lucide-react";
 import { PageHeader } from "../components/ui";
-import { analizar, conExclusiones, corregirTelefono, esCandidato, leerArchivo, quitarFilas, sugerirTelefono, type Analisis, type FilaAnalizada } from "../lib/importacion";
+import { MOTIVOS_ELEGIBLES, analizar, conExclusiones, corregirTelefono, esCandidato, leerArchivo, quitarFilas, sugerirTelefono, type Analisis, type FilaAnalizada } from "../lib/importacion";
 import { agregarExclusion, importarReclamos, type ResultadoImport } from "../lib/api";
 import { useDatos } from "../lib/useDatos";
 import { telefonoLindo, v } from "../lib/format";
@@ -110,7 +110,7 @@ export default function CargaPage() {
   }
 
   const invalidos = analisis ? analisis.filas.filter((f) => f.data && !f.data.telefono_valido) : [];
-  const aRevisar = verTodosInvalidos ? invalidos : invalidos.filter((f) => esCandidato(f.data!.estado, f.data!.situacion));
+  const aRevisar = verTodosInvalidos ? invalidos : invalidos.filter((f) => esCandidato(f.data!.estado, f.data!.situacion, f.data!.motivo));
 
   const visibles = analisis ? analisis.filas.filter(FILTROS.find((f) => f.id === filtro)!.test) : [];
   const nuevos = analisis ? analisis.validos.filter((r) => !existentes.has(r.numero_reclamo)).length : 0;
@@ -355,7 +355,7 @@ export default function CargaPage() {
               </div>
             </div>
             <p className="text-xs text-slate-500">
-              Se marcan como <b>elegibles para WhatsApp</b> los reclamos con Estado “Cerrado”, Situación “Resp.Positiva”, teléfono válido y que no estén en la lista de no elegibles. Con <Ban size={12} className="inline" /> agregás un teléfono a esa lista. Si el Nro. de reclamo ya existe, se actualiza.
+              Se marcan como <b>elegibles para WhatsApp</b> los reclamos con Estado “Cerrado”, Situación “Resp.Positiva”, motivo {MOTIVOS_ELEGIBLES.map((m) => `“${m}”`).join(", ")}, teléfono válido y que no estén en la lista de no elegibles. Con <Ban size={12} className="inline" /> agregás un teléfono a esa lista. Si el Nro. de reclamo ya existe, se actualiza.
             </p>
           </>
         )}

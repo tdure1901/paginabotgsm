@@ -184,17 +184,28 @@ const normalizarNro = (x: string | undefined) =>
     .replace(/\s+/g, " ")
     .trim() || null;
 
+/** Motivos a los que se les manda el aviso (los mismos que filtra la vista reclamos_para_notificar) */
+export const MOTIVOS_ELEGIBLES = ["ALUMBRADO PUBLICO", "ARBOL", "LIMPIEZA Y RECOLECCION DOMICILIARIA"];
+
+export function motivoElegible(motivo: string | null) {
+  return MOTIVOS_ELEGIBLES.includes((motivo ?? "").trim().toUpperCase());
+}
+
 /** El reclamo está en condiciones de recibir el aviso (sin mirar el teléfono) */
-export function esCandidato(estado: string | null, situacion: string | null) {
-  return (estado ?? "").trim() === "Cerrado" && (situacion ?? "").trim() === "Resp.Positiva";
+export function esCandidato(estado: string | null, situacion: string | null, motivo: string | null) {
+  return (estado ?? "").trim() === "Cerrado" && (situacion ?? "").trim() === "Resp.Positiva" && motivoElegible(motivo);
 }
 
 /**
  * Reglas de elegibilidad para WhatsApp (las mismas que usa la vista reclamos_para_notificar):
- * Estado "Cerrado" + Situación "Resp.Positiva" + teléfono válido + teléfono fuera de la lista de exclusión.
+ * Estado "Cerrado" + Situación "Resp.Positiva" + motivo habilitado + teléfono válido + fuera de la lista de no elegibles.
  */
-export function esElegible(estado: string | null, situacion: string | null, tel: { normalizado: string | null; valido: boolean }, exclusiones?: Exclusiones) {
-  return esCandidato(estado, situacion) && tel.valido && !(tel.normalizado && exclusiones?.has(tel.normalizado));
+export function esElegible(
+  r: { estado: string | null; situacion: string | null; motivo: string | null },
+  tel: { normalizado: string | null; valido: boolean },
+  exclusiones?: Exclusiones,
+) {
+  return esCandidato(r.estado, r.situacion, r.motivo) && tel.valido && !(tel.normalizado && exclusiones?.has(tel.normalizado));
 }
 
 /**
@@ -256,7 +267,7 @@ export function analizar(rows: FilaCruda[], filas: number[], exclusiones: Exclus
       numero_reclamo: nro,
       telefono_normalizado: tel.normalizado,
       telefono_valido: tel.valido,
-      whatsapp_eligible: esElegible(a.estado ?? null, a.situacion ?? null, tel, exclusiones),
+      whatsapp_eligible: esElegible({ estado: a.estado ?? null, situacion: a.situacion ?? null, motivo: a.motivo ?? null }, tel, exclusiones),
     } as ReclamoImport;
     return { fila, status: "VALIDA", numero_reclamo: nro, data, advertencias: adv };
   });
@@ -271,7 +282,7 @@ export function recalcular(entrada: FilaAnalizada[], exclusiones: Exclusiones): 
     const tel = { normalizado: f.data.telefono_normalizado, valido: f.data.telefono_valido };
     const exc = motivoExclusion(tel.normalizado, exclusiones);
     if (exc) advertencias.push(exc);
-    return { ...f, advertencias, data: { ...f.data, whatsapp_eligible: esElegible(f.data.estado, f.data.situacion, tel, exclusiones) } };
+    return { ...f, advertencias, data: { ...f.data, whatsapp_eligible: esElegible(f.data, tel, exclusiones) } };
   });
   const cuenta = new Map<string, number>();
   for (const f of filas) {
@@ -305,7 +316,7 @@ export function recalcular(entrada: FilaAnalizada[], exclusiones: Exclusiones): 
       telInvalidos: validos.filter((d) => !d.telefono_valido).length,
       elegibles: validos.filter((d) => d.whatsapp_eligible).length,
       excluidos: validos.filter((d) => !!d.telefono_normalizado && exclusiones.has(d.telefono_normalizado)).length,
-      telARevisar: validos.filter((d) => !d.telefono_valido && esCandidato(d.estado, d.situacion)).length,
+      telARevisar: validos.filter((d) => !d.telefono_valido && esCandidato(d.estado, d.situacion, d.motivo)).length,
       duplicadosReclamo: conData - validos.length,
       telefonosRepetidos: [...cuenta.values()].filter((n) => n > 1).length,
     },
@@ -332,7 +343,7 @@ export function corregirTelefono(a: Analisis, fila: number, nuevo: string): Anal
           telefono_original: raw,
           telefono_normalizado: tel.normalizado,
           telefono_valido: tel.valido,
-          whatsapp_eligible: esElegible(f.data.estado, f.data.situacion, tel, a.exclusiones),
+          whatsapp_eligible: esElegible(f.data, tel, a.exclusiones),
         },
       };
     }),

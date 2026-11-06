@@ -24,7 +24,7 @@ export default function TelefonosPage() {
   const invalidos = useMemo(
     () =>
       reclamos.filter((r) => {
-        if (r.telefono_valido || !esCandidato(r.estado, r.situacion)) return false;
+        if (r.telefono_valido || !esCandidato(r.estado, r.situacion, r.motivo)) return false;
         const n = ultimaNotif.get(r.id);
         return !n || ["pendiente", "error"].includes((n.estado ?? "").toLowerCase()) || categoria(n) === "error";
       }),
@@ -179,7 +179,7 @@ export default function TelefonosPage() {
                             onClick={async () => {
                               if (!confirm(`¿Quitar ${telefonoLindo(e.telefono)} de la lista? Sus reclamos que cumplan las reglas van a volver a la cola del bot.`)) return;
                               try {
-                                await quitarExclusion(e.telefono);
+                                await quitarExclusion(e.telefono, reclamos);
                                 await recargar();
                               } catch (err) {
                                 setError(err instanceof Error ? err.message : String(err));
