@@ -1,6 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { BarChart3, MessagesSquare, UploadCloud, Bot, FlaskConical } from "lucide-react";
-import { MODO_DEMO } from "../lib/api";
+import { BarChart3, MessagesSquare, UploadCloud, Bot, FlaskConical, LogOut, AlertTriangle } from "lucide-react";
+import { MODO_DEMO, salir } from "../lib/api";
 import { useDatos } from "../lib/useDatos";
 
 const NAV = [
@@ -9,9 +9,9 @@ const NAV = [
   { to: "/conversaciones", label: "Conversaciones", icon: MessagesSquare },
 ];
 
-export default function Layout() {
-  const { mensajes } = useDatos();
-  const noLeidos = mensajes.filter((m) => m.direccion === "entrante" && !m.leido).length;
+export default function Layout({ email }: { email?: string }) {
+  const { reclamos, noLeidos: nl, error } = useDatos();
+  const noLeidos = reclamos.reduce((a, r) => a + nl(r.id), 0);
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
@@ -44,16 +44,29 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
+        {email && (
+          <div className="mx-3 mt-auto mb-4 hidden items-center gap-2 rounded-lg bg-slate-50 p-2.5 text-xs text-slate-600 md:flex">
+            <span className="min-w-0 flex-1 truncate">{email}</span>
+            <button className="text-slate-400 hover:text-rose-600" title="Cerrar sesión" onClick={salir}>
+              <LogOut size={15} />
+            </button>
+          </div>
+        )}
         {MODO_DEMO && (
           <div className="mx-3 mt-auto mb-4 hidden rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 md:block">
             <div className="mb-1 flex items-center gap-1.5 font-semibold">
               <FlaskConical size={14} /> Modo demo
             </div>
-            Datos de ejemplo guardados en este navegador. Configurá Supabase en <code>.env</code> para usar la base real.
+            Datos de ejemplo guardados en este navegador. Configurá Supabase en <code>.env</code> para usar tu base real.
           </div>
         )}
       </aside>
       <main className="min-w-0 flex-1">
+        {error && (
+          <div className="flex items-center gap-2 border-b border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700 md:px-8">
+            <AlertTriangle size={16} /> No se pudieron cargar los datos: {error}
+          </div>
+        )}
         <Outlet />
       </main>
     </div>

@@ -1,50 +1,37 @@
 # Reclamos Bot · Panel municipal
 
-Panel web para gestionar el bot de seguimiento de reclamos municipales (n8n + WhatsApp).
+Panel para el bot de seguimiento de reclamos (Supabase + n8n + WhatsApp).
+Usa **la misma base de Supabase** que la app de Lovable (`subirreclamosbot.lovable.app`): tablas `reclamos` y `whatsapp_notificaciones`, y el mismo login por email y contraseña.
 
-Tiene 3 secciones:
+## Secciones
 
 | Sección | Ruta | Qué hace |
 |---|---|---|
-| **Carga de datos** | `/carga` | Subir Excel/CSV, detección automática de columnas, vista previa con validación (nombre + teléfono), importación a la base y disparo opcional del bot. Historial de cargas con botón para enviar pendientes. |
-| **Monitoreo** | `/monitoreo` | KPIs (cargados, enviados, sin respuesta, positivas, negativas), gráficos por estado, por día y por tipo de reclamo. Tabla filtrable (estado, tipo, barrio, carga, búsqueda), exportar CSV y panel de detalle de cada reclamo. |
-| **Conversaciones** | `/conversaciones` | CRM tipo WhatsApp: lista de chats con no leídos y filtros, hilo de mensajes (bot / operador / vecino), envío de mensajes manuales, respuestas rápidas y clasificación manual del resultado. |
+| **Importación** | `/carga` | Sube el `.xls` exportado del sistema de reclamos (también `.xlsx`/`.csv` con las mismas columnas). Mismas reglas que Lovable: normaliza teléfonos argentinos a `549…`, valida fechas, marca **elegibles para WhatsApp** (Estado `Cerrado` + Situación `Resp.Positiva` + teléfono válido), avisa teléfonos repetidos y deduplica por Nro. de reclamo. Permite corregir teléfonos y quitar filas antes de importar. Hace *upsert* por `numero_reclamo` en lotes de 500. |
+| **Monitoreo** | `/monitoreo` | KPIs (cargados, elegibles, enviados, sin responder aún, SÍ, NO, sin respuesta, tasa de respuesta), gráficos por estado, por día y por submotivo, tabla filtrable con export CSV y ficha completa de cada reclamo. |
+| **Conversaciones** | `/conversaciones` | CRM tipo WhatsApp: chats por reclamo con la notificación del bot, la respuesta del vecino y los mensajes manuales. Filtros por resultado y no leídos, respuestas rápidas y envío de mensajes por n8n. |
+
+La clasificación de respuestas es la misma del monitoreo de Lovable: `respuesta_usuario` = `si`/`1` → SÍ, `no`/`2` → NO; si no, se mira `estado` (`sin …` → sin respuesta, `respondido …`, `enviado` → esperando).
 
 ## Correr local
 
 ```bash
 npm install
-cp .env.example .env   # opcional: completar Supabase y webhooks
+cp .env.example .env   # completar con la URL y anon key de Supabase del proyecto Lovable
 npm run dev
 ```
 
-Sin variables de entorno funciona en **modo demo** (datos de ejemplo guardados en el navegador).
+Sin `.env` arranca en **modo demo** con datos de ejemplo.
 
-## Conectar con Supabase
+## Para habilitar el chat (sección Conversaciones)
 
-1. Ejecutar `supabase/schema.sql` en el SQL Editor.
-2. Completar `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` en `.env`.
+Importar y monitorear funcionan con las tablas que ya existen. Para **escribirle al vecino desde el panel** hacen falta dos cosas:
 
-Si ya tenés tablas creadas en Lovable con otros nombres de columnas, ajustá `src/lib/types.ts` y las consultas en `src/lib/api.ts`.
+1. Ejecutar `supabase/chat.sql` (crea la tabla `whatsapp_mensajes`).
+2. Un webhook en n8n (`VITE_N8N_WEBHOOK_MENSAJE`) que reciba `{ reclamo_id, numero_reclamo, telefono, solicitante, mensaje }` y mande el WhatsApp. El panel guarda el mensaje en `whatsapp_mensajes`.
 
-## Integración con n8n
-
-El panel llama a dos webhooks (POST JSON):
-
-- `VITE_N8N_WEBHOOK_LOTE` → `{ lote_id, cantidad? }`
-  El flujo debe leer los reclamos `pendiente` de ese lote, enviar el WhatsApp y por cada uno:
-  - `update reclamos set estado_envio='enviado', enviado_at=now()` (o `'error'`)
-  - `insert into mensajes (reclamo_id, direccion, origen, contenido) values (..., 'saliente', 'bot', '<texto>')`
-- `VITE_N8N_WEBHOOK_MENSAJE` → `{ reclamo_id, telefono, nombre, mensaje }`
-  Solo debe enviar el WhatsApp; el panel ya guarda el mensaje en la tabla `mensajes`.
-
-Cuando el vecino responde, el flujo de n8n que recibe el WhatsApp debe:
-1. Buscar el reclamo por `telefono`.
-2. `insert into mensajes (..., direccion='entrante', origen='vecino', contenido, leido=false)`.
-3. Clasificar (SÍ/NO o con IA) y `update reclamos set respuesta='positiva'|'negativa', respondido_at=now()`.
-
-Gracias a Supabase Realtime el panel se actualiza solo.
+Opcional: para ver en el chat lo que el vecino escribe **después** de su primera respuesta, el flujo de n8n que recibe WhatsApp puede insertar en `whatsapp_mensajes` con `direccion='entrante'`, `origen='vecino'`.
 
 ## Stack
 
-React 19 + Vite + TypeScript + Tailwind CSS 4, Recharts, SheetJS/PapaParse, Supabase JS.
+React 19 + Vite + TypeScript + Tailwind CSS 4, Recharts, SheetJS, Supabase JS.

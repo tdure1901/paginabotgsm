@@ -20,16 +20,13 @@ export function EstadoBadge({ estado }: { estado: EstadoVisible }) {
 
 export function Avatar({ nombre, size = 36 }: { nombre: string; size?: number }) {
   const ini = nombre
-    .split(" ")
+    .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase())
     .join("");
   return (
-    <div
-      className="grid shrink-0 place-items-center rounded-full bg-brand-100 font-semibold text-brand-700"
-      style={{ width: size, height: size, fontSize: size * 0.38 }}
-    >
+    <div className="grid shrink-0 place-items-center rounded-full bg-brand-100 font-semibold text-brand-700" style={{ width: size, height: size, fontSize: size * 0.38 }}>
       {ini}
     </div>
   );

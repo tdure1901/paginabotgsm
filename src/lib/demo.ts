@@ -1,90 +1,84 @@
-import type { Lote, Mensaje, Reclamo, Respuesta, EstadoEnvio } from "./types";
+import type { MensajeChat, Notificacion, Reclamo } from "./types";
 
-const NOMBRES = ["María González", "Juan Pérez", "Lucía Fernández", "Carlos Rodríguez", "Ana López", "Diego Martínez", "Sofía Gómez", "Martín Díaz", "Valentina Romero", "Pablo Sosa", "Camila Torres", "Federico Álvarez", "Julieta Ruiz", "Santiago Benítez", "Florencia Acosta", "Nicolás Medina", "Agustina Herrera", "Matías Castro", "Rocío Suárez", "Gonzalo Molina", "Carla Ortiz", "Hernán Silva", "Paula Rojas", "Emiliano Vega"];
-const BARRIOS = ["Centro", "Villa Nueva", "San Martín", "Los Álamos", "Barrio Norte", "La Loma", "Belgrano"];
-const TIPOS = ["Alumbrado público", "Bacheo", "Recolección de residuos", "Poda de árboles", "Desagües", "Señalización"];
-const CALLES = ["Av. Mitre", "San Juan", "Rivadavia", "Belgrano", "Sarmiento", "9 de Julio", "Moreno", "Urquiza"];
+const NOMBRES = ["GONZALEZ MARIA", "PEREZ JUAN CARLOS", "FERNANDEZ LUCIA", "RODRIGUEZ CARLOS", "LOPEZ ANA", "MARTINEZ DIEGO", "GOMEZ SOFIA", "DIAZ MARTIN", "ROMERO VALENTINA", "SOSA PABLO", "TORRES CAMILA", "ALVAREZ FEDERICO", "RUIZ JULIETA", "BENITEZ SANTIAGO", "ACOSTA FLORENCIA", "MEDINA NICOLAS", "HERRERA AGUSTINA", "CASTRO MATIAS", "SUAREZ ROCIO", "MOLINA GONZALO", "ORTIZ CARLA", "SILVA HERNAN", "ROJAS PAULA", "VEGA EMILIANO", "NUÑEZ LAURA", "CABRERA JORGE"];
+const SUB = [
+  ["Alumbrado", "Luminaria apagada"],
+  ["Vía pública", "Bacheo"],
+  ["Higiene urbana", "Recolección de residuos"],
+  ["Arbolado", "Poda"],
+  ["Hidráulica", "Limpieza de desagües"],
+  ["Tránsito", "Señalización"],
+];
+const LOCALIDADES = ["Centro", "Villa Nueva", "San Martín", "Los Álamos", "Barrio Norte"];
+const CALLES = ["MITRE", "SAN JUAN", "RIVADAVIA", "BELGRANO", "SARMIENTO", "9 DE JULIO", "MORENO"];
 
-const POSITIVAS = ["Sí, ya lo solucionaron, muchas gracias!", "Si, quedó perfecto 👍", "Todo bien, vinieron ayer", "Sí, excelente atención"];
-const NEGATIVAS = ["No, todavía sigue igual", "No vino nadie todavía", "No, lo arreglaron mal y volvió a romperse", "No, sigue el problema"];
+const pick = <T,>(a: T[], i: number) => a[i % a.length];
 
-function rnd<T>(arr: T[], i: number) {
-  return arr[i % arr.length];
-}
-function uid() {
-  return crypto.randomUUID();
-}
-
-export function generarDemo(): { reclamos: Reclamo[]; mensajes: Mensaje[]; lotes: Lote[] } {
+export function generarDemo(): { reclamos: Reclamo[]; notificaciones: Notificacion[]; mensajes: MensajeChat[] } {
   const now = Date.now();
-  const lotes: Lote[] = [
-    { id: uid(), created_at: new Date(now - 6 * 864e5).toISOString(), nombre_archivo: "reclamos_octubre.xlsx", cantidad: 14 },
-    { id: uid(), created_at: new Date(now - 2 * 864e5).toISOString(), nombre_archivo: "reclamos_semana_44.csv", cantidad: 10 },
-  ];
   const reclamos: Reclamo[] = [];
-  const mensajes: Mensaje[] = [];
+  const notificaciones: Notificacion[] = [];
+  const mensajes: MensajeChat[] = [];
 
   NOMBRES.forEach((nombre, i) => {
-    const lote = i < 14 ? lotes[0] : lotes[1];
-    const base = new Date(lote.created_at).getTime() + (i % 5) * 36e5;
-    const estado: EstadoEnvio = i % 11 === 10 ? "error" : i > 21 ? "pendiente" : "enviado";
-    let respuesta: Respuesta = "sin_respuesta";
-    if (estado === "enviado") respuesta = i % 3 === 0 ? "negativa" : i % 4 === 1 ? "sin_respuesta" : "positiva";
-    const tipo = rnd(TIPOS, i * 7);
+    const [motivo, submotivo] = pick(SUB, i * 5);
+    const elegible = i % 9 !== 8;
+    const tel = `549341${String(4100000 + i * 37919).slice(0, 7)}`;
+    const ingreso = new Date(now - (20 - (i % 7)) * 864e5);
     const r: Reclamo = {
-      id: uid(),
-      created_at: new Date(base).toISOString(),
-      lote_id: lote.id,
-      numero_reclamo: `R-${2026}${String(1040 + i).padStart(5, "0")}`,
-      nombre,
-      telefono: `+54 9 341 ${String(5000000 + i * 13791).slice(0, 3)}-${String(1000 + i * 37).slice(0, 4)}`,
-      direccion: `${rnd(CALLES, i * 3)} ${100 + i * 47}`,
-      barrio: rnd(BARRIOS, i * 5),
-      tipo,
-      descripcion: `Reclamo por ${tipo.toLowerCase()} frente al domicilio.`,
-      fecha_reclamo: new Date(base - 10 * 864e5).toISOString().slice(0, 10),
-      estado_envio: estado,
-      respuesta,
-      enviado_at: estado === "enviado" ? new Date(base + 6e5).toISOString() : null,
-      respondido_at: respuesta !== "sin_respuesta" ? new Date(base + 3 * 36e5 + i * 6e5).toISOString() : null,
+      id: crypto.randomUUID(),
+      numero_reclamo: `${2026}-${String(48120 + i * 3)}`,
+      fecha_ingreso: ingreso.toISOString().slice(0, 19),
+      estado: elegible ? "Cerrado" : "En curso",
+      situacion: elegible ? "Resp.Positiva" : "Derivado",
+      motivo,
+      submotivo,
+      localidad: pick(LOCALIDADES, i * 3),
+      calle: pick(CALLES, i * 7),
+      numero_domicilio: String(100 + i * 47),
+      texto_reclamo: `Vecino solicita ${submotivo.toLowerCase()} frente a su domicilio.`,
+      solicitante: nombre,
+      telefono_original: `0341-15-${tel.slice(6, 9)}-${tel.slice(9)}`,
+      telefono_normalizado: tel,
+      telefono_valido: true,
+      whatsapp_eligible: elegible,
+      texto_respuesta: elegible ? "Se realizó el trabajo solicitado." : null,
+      fecha_respuesta: elegible ? new Date(ingreso.getTime() + 5 * 864e5).toISOString().slice(0, 19) : null,
+      fecha_verificacion: null,
+      forma_verificacion: null,
+      observaciones_verificacion: null,
+      contacto_verificacion: null,
+      conformidad_verificacion: null,
+      estado_verificacion: null,
+      resultado_verificacion: null,
+      updated_at: new Date(now - 6 * 864e5).toISOString(),
     };
     reclamos.push(r);
+    if (!elegible || i > 22) return;
 
-    if (estado === "enviado") {
+    const enviado = new Date(now - (5 - (i % 5)) * 864e5 - (i % 6) * 36e5);
+    const tipo = i % 4 === 0 ? "no" : i % 5 === 1 ? "pendiente" : i % 7 === 3 ? "sin" : "si";
+    const resp = tipo === "si" ? pick(["Si", "SI", "si", "1"], i) : tipo === "no" ? pick(["No", "NO", "2"], i) : null;
+    const respondido = new Date(enviado.getTime() + (1 + (i % 4)) * 36e5);
+    notificaciones.push({
+      id: crypto.randomUUID(),
+      created_at: enviado.toISOString(),
+      updated_at: resp ? respondido.toISOString() : enviado.toISOString(),
+      reclamo_id: r.id,
+      estado: tipo === "si" ? "respondido si" : tipo === "no" ? "respondido no" : tipo === "sin" ? "sin respuesta" : "enviado",
+      respuesta_usuario: resp,
+    });
+    if (tipo === "no" && i % 8 === 0) {
       mensajes.push({
-        id: uid(),
+        id: crypto.randomUUID(),
+        created_at: new Date(respondido.getTime() + 6e4).toISOString(),
         reclamo_id: r.id,
-        direccion: "saliente",
-        origen: "bot",
-        contenido: `Hola ${nombre.split(" ")[0]}! Te escribimos desde la Municipalidad por tu reclamo ${r.numero_reclamo} (${tipo}). ¿Se solucionó el problema? Respondé SÍ o NO.`,
-        created_at: r.enviado_at!,
-        leido: true,
+        direccion: "entrante",
+        origen: "vecino",
+        contenido: "Sigue igual, nadie vino a arreglarlo",
       });
-      if (respuesta !== "sin_respuesta") {
-        mensajes.push({
-          id: uid(),
-          reclamo_id: r.id,
-          direccion: "entrante",
-          origen: "vecino",
-          contenido: respuesta === "positiva" ? rnd(POSITIVAS, i) : rnd(NEGATIVAS, i),
-          created_at: r.respondido_at!,
-          leido: i % 2 === 0,
-        });
-        mensajes.push({
-          id: uid(),
-          reclamo_id: r.id,
-          direccion: "saliente",
-          origen: "bot",
-          contenido:
-            respuesta === "positiva"
-              ? "¡Gracias por tu respuesta! Nos alegra que se haya resuelto. 🙌"
-              : "Lamentamos que siga el problema. Un operador va a revisar tu caso y te contactará a la brevedad.",
-          created_at: new Date(new Date(r.respondido_at!).getTime() + 3e4).toISOString(),
-          leido: true,
-        });
-      }
     }
   });
 
-  return { reclamos, mensajes, lotes };
+  return { reclamos, notificaciones, mensajes };
 }
