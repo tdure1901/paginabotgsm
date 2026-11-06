@@ -46,7 +46,7 @@ Los reclamos notificados antes de este cambio se siguen viendo: el panel arma su
 
 ### Pasos para activarlo
 
-1. Ejecutar `supabase/chat.sql`, `supabase/conversaciones.sql` (tabla `whatsapp_mensajes` + vista `ultima_notificacion_por_telefono`) y `supabase/exclusiones.sql` (lista de no elegibles; agregar también la condición que indica a la vista `reclamos_para_notificar`).
+1. Ejecutar `supabase/chat.sql` (tabla `whatsapp_mensajes` + vista `ultima_notificacion_por_telefono`), `supabase/conversaciones.sql` (vista para la lista de chats) y `supabase/exclusiones.sql` (lista de no elegibles; agregar también la condición que indica a la vista `reclamos_para_notificar`).
 2. En n8n crear una credencial **Header Auth** llamada `WhatsApp Cloud API` con nombre `Authorization` y valor `Bearer <token>` (token nuevo de Meta).
 3. Importar los 3 workflows de `n8n/`, elegir las credenciales en los nodos marcados y desactivar los workflows viejos. En `mensajes-panel.json` pegar la anon key en el nodo *Verificar usuario*.
 4. Crear en Meta la plantilla `retomar_conversacion` (categoría *Utilidad*, idioma `es_AR`) con dos variables: `{{1}}` nombre y `{{2}}` nro. de reclamo. El texto tiene que coincidir con el de `src/lib/plantillas.ts`.
