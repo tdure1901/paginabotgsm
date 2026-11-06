@@ -24,7 +24,9 @@ export default function Layout({ email }: { email?: string }) {
           </div>
           <div className="leading-tight">
             <div className="font-semibold text-slate-900">Reclamos Bot</div>
-            <div className="text-xs text-slate-500">Panel municipal</div>
+            <div className="text-xs text-slate-500">
+              Panel municipal · <span className="font-semibold text-brand-700">Versión 1.0</span>
+            </div>
           </div>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-3 pb-3 md:flex-col md:pb-0">
