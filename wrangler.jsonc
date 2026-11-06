@@ -1,0 +1,15 @@
+// Configuración de Cloudflare Workers (publicación del panel).
+// "name" tiene que coincidir EXACTO con el nombre del Worker en Cloudflare.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "reclamosbotgsm",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    // Carpeta que genera `npm run build`
+    "directory": "./dist",
+    // Cualquier ruta (/monitoreo, /conversaciones/…) devuelve el panel
+    "not_found_handling": "single-page-application"
+  },
+  // Necesario para las URLs de prueba de las ramas (`wrangler preview`)
+  "previews": {}
+}
