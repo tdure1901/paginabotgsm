@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Pencil, Trash2, UploadCloud, X, PhoneOff, Wand2, Ban } from "lucide-react";
 import { PageHeader } from "../components/ui";
-import { MOTIVOS_ELEGIBLES, motivoNoElegible, analizar, conExclusiones, corregirTelefono, esCandidato, leerArchivo, quitarFilas, sugerirTelefono, type Analisis, type FilaAnalizada } from "../lib/importacion";
+import { MOTIVOS_ELEGIBLES, columnasFaltantes, motivoNoElegible, analizar, conExclusiones, corregirTelefono, esCandidato, leerArchivo, quitarFilas, sugerirTelefono, type Analisis, type FilaAnalizada } from "../lib/importacion";
 import { agregarExclusion, importarReclamos, type ResultadoImport } from "../lib/api";
 import { useDatos } from "../lib/useDatos";
 import { buscarExistentes } from "../lib/consultas";
@@ -41,6 +41,7 @@ export default function CargaPage() {
   const mapaExcl = useMemo(() => new Map(exclusiones.map((e) => [e.telefono, e.motivo ?? ""])), [exclusiones]);
   const [excluyendo, setExcluyendo] = useState<{ tel: string; nombre: string; motivo: string } | null>(null);
   const [verTodosInvalidos, setVerTodosInvalidos] = useState(false);
+  const [faltantes, setFaltantes] = useState<string[]>([]);
   const [archivo, setArchivo] = useState<File | null>(null);
   const [analisis, setAnalisis] = useState<Analisis | null>(null);
   const [filtro, setFiltro] = useState<Filtro>("todos");
@@ -58,7 +59,8 @@ export default function CargaPage() {
     setError("");
     setResultado(null);
     try {
-      const { rows, filas } = await leerArchivo(file);
+      const { rows, filas, cabeceras } = await leerArchivo(file);
+      setFaltantes(columnasFaltantes(cabeceras));
       setArchivo(file);
       // 1) Primer análisis para obtener los Nro. de reclamo ya normalizados
       const previo = analizar(rows, filas, mapaExcl);
@@ -194,6 +196,16 @@ export default function CargaPage() {
                 {progreso ? `Importando ${progreso[0]}/${progreso[1]}…` : `Importar ${analisis.validos.length} reclamos`}
               </button>
             </div>
+
+            {faltantes.length > 0 && (
+              <div className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+                <div>
+                  No se encontraron estas columnas en el archivo: <b>{faltantes.join(", ")}</b>. Sin ellas ningún reclamo puede ser elegible para WhatsApp.
+                  Revisá que el archivo sea el export completo del sistema.
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-5 xl:grid-cols-9">
               <Stat label="Filas" valor={analisis.stats.total} />

@@ -481,6 +481,7 @@ Si algún día se usa otro hosting: `npm run build` genera la carpeta `dist/`. H
 | Problema | Causa probable | Qué hacer |
 |---|---|---|
 | "No se pudo reconocer el formato del archivo" | El archivo no tiene la columna **Nro. Reclamo** | Exportarlo de nuevo del sistema, sin modificarlo. |
+| Aviso rojo "No se encontraron estas columnas…" | El archivo no trae esa columna (o viene con otro nombre) | Exportar de nuevo el listado completo del sistema. Si la columna existe con otro nombre, avisar para agregarlo en `src/lib/importacion.ts` (`COLUMNAS`). |
 | Reclamos que deberían ser elegibles dan "No" | Algún dato viene distinto a lo esperado | En la importación, la columna **WhatsApp** muestra debajo del "No" el motivo (estado, situación, motivo o teléfono). |
 | Al enviar desde el chat: "Failed to fetch" | El workflow **Mensajes del panel** está apagado, o falta CORS | Activarlo. En el nodo `Panel`, *Allowed Origins* = `*` (o el dominio del panel). Usar la URL de **producción**, no la `/webhook-test/`. |
 | "No autorizado. Volvé a iniciar sesión" | Sesión vencida o anon key mal pegada en n8n | Cerrar sesión y volver a entrar; revisar el nodo **Verificar usuario**. |

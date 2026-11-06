@@ -70,6 +70,47 @@ const limpiar = (s: string) => s.replace(/ /g, " ").replace(/\s+/g, " ").trim()
 const clave = (s: string) => limpiar(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 const MAPA = new Map(Object.entries(COLUMNAS).map(([k, val]) => [clave(k), val]));
 
+/** Solo letras y números: "Situación" → "situacion" */
+const esqueleto = (s: string) => clave(s).replace(/[^a-z0-9]/g, "");
+const ESQUELETOS = Object.entries(COLUMNAS).map(([k, val]) => [esqueleto(k), val] as const);
+
+function distancia(a: string, b: string) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+}
+
+/**
+ * A qué campo corresponde una columna del archivo. Tolera tildes mal codificadas
+ * ("Situaci�n", "SituaciÃ³n"), espacios y puntos de más.
+ */
+export function campoDeColumna(cabecera: string): keyof ReclamoImport | undefined {
+  const exacto = MAPA.get(clave(cabecera));
+  if (exacto) return exacto;
+  const e = esqueleto(cabecera);
+  if (!e) return undefined;
+  const igual = ESQUELETOS.find(([k]) => k === e);
+  if (igual) return igual[1];
+  if (e.length < 5) return undefined;
+  const cerca = ESQUELETOS.filter(([k]) => distancia(k, e) <= 1);
+  return cerca.length === 1 ? cerca[0][1] : undefined;
+}
+
+/** Columnas necesarias para decidir la elegibilidad: si falta alguna, se avisa en la importación */
+const COLUMNAS_CLAVE: [keyof ReclamoImport, string][] = [
+  ["estado", "Estado"],
+  ["situacion", "Situación"],
+  ["motivo", "Motivo"],
+  ["solicitante", "Solicitante"],
+  ["telefono_original", "Tel. Solicitante"],
+];
+export function columnasFaltantes(cabeceras: string[]): string[] {
+  const encontrados = new Set(cabeceras.map(campoDeColumna).filter(Boolean));
+  return COLUMNAS_CLAVE.filter(([c]) => !encontrados.has(c)).map(([, nombre]) => nombre);
+}
+
 /* ---------------- Lectura del archivo ---------------- */
 
 /** Devuelve la tabla como matriz de celdas (texto). Soporta el .xls-HTML del sistema, .xlsx, .xls binario y .csv */
@@ -78,7 +119,9 @@ async function leerMatriz(file: File): Promise<string[][]> {
   const inicio = new TextDecoder().decode(buf.slice(0, 2048)).trimStart().toLowerCase();
   if (inicio.startsWith("<")) {
     // El sistema exporta un .xls que en realidad es una tabla HTML
-    const html = new TextDecoder(detectarCharset(inicio)).decode(buf);
+    let html = new TextDecoder(detectarCharset(inicio)).decode(buf);
+    // Si se leyó como UTF-8 pero el archivo es Windows-1252 (típico de sistemas viejos), las tildes salen como "�"
+    if (html.includes("\uFFFD")) html = new TextDecoder("windows-1252").decode(buf);
     const doc = new DOMParser().parseFromString(html, "text/html");
     const tablas = Array.from(doc.querySelectorAll("table"));
     if (!tablas.length) throw new Error("No se encontró una tabla válida en el archivo.");
@@ -95,7 +138,7 @@ function detectarCharset(head: string) {
   return m?.[1] ?? "utf-8";
 }
 
-export async function leerArchivo(file: File): Promise<{ rows: FilaCruda[]; filas: number[] }> {
+export async function leerArchivo(file: File): Promise<{ rows: FilaCruda[]; filas: number[]; cabeceras: string[] }> {
   const m = await leerMatriz(file);
   if (m.length < 2) throw new Error("La tabla del archivo no contiene filas de datos.");
   const idx = m.slice(0, 10).findIndex((r) => r.some((c) => clave(c) === "nro. reclamo"));
@@ -112,7 +155,7 @@ export async function leerArchivo(file: File): Promise<{ rows: FilaCruda[]; fila
     rows.push(o);
     filas.push(idx + i + 2);
   });
-  return { rows, filas };
+  return { rows, filas, cabeceras: cab };
 }
 
 /* ---------------- Normalizaciones ---------------- */
@@ -279,7 +322,7 @@ export function analizar(rows: FilaCruda[], filas: number[], exclusiones: Exclus
     const fila = filas[i] ?? i + 2;
     const a: Partial<Record<keyof ReclamoImport, string | null>> = {};
     for (const [k, val] of Object.entries(row)) {
-      const campo = MAPA.get(clave(k));
+      const campo = campoDeColumna(k);
       if (campo) a[campo] = vacioANull(val);
     }
     const nro = normalizarNro(a.numero_reclamo ?? undefined);
