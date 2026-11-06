@@ -23,3 +23,5 @@ alter publication supabase_realtime add table public.whatsapp_exclusiones;
 --         select 1 from public.whatsapp_exclusiones e
 --         where e.telefono = r.telefono_normalizado
 --     )
+
+notify pgrst, 'reload schema';

@@ -453,6 +453,7 @@ Genera la carpeta `dist/`, que se puede subir a cualquier hosting estático (Ver
 | "La plantilla no existe o no está aprobada" | Nombre/idioma distinto o todavía en revisión | Comparar con WhatsApp Manager. |
 | El vecino respondió pero no aparece | El workflow **Respuestas-bot** está apagado, o la notificación no tiene `telefono_destino` | Revisar **Executions** en n8n. |
 | Mensajes que no aparecen en el chat pero sí llegaron | La credencial de Supabase en n8n no es la service_role | Cambiarla. |
+| n8n: "Could not find the 'x' column of '…' in the schema cache" | Falta esa columna, o Supabase no refrescó las columnas | Volver a ejecutar el `.sql` correspondiente (se puede correr varias veces). Termina con `notify pgrst, 'reload schema';`, que refresca las columnas. |
 | La pantalla dice "Falta crear la tabla…" | No se ejecutó el SQL | Ejecutar `supabase/chat.sql` o `supabase/exclusiones.sql`. |
 | Al recargar una página del panel da 404 | Falta la regla de rutas del hosting | Ver [Publicar](#publicar). |
 
