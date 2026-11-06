@@ -11,8 +11,9 @@ select
   r.contacto_verificacion, r.conformidad_verificacion, r.estado_verificacion,
   r.resultado_verificacion, r.whatsapp_eligible, r.created_at, r.updated_at
 from public.reclamos r
-where r.estado = 'Cerrado'
-  and r.situacion = 'Resp.Positiva'
+-- Estado y situación sin importar mayúsculas, espacios ni puntos ("Resp.Positiva", "RESP. POSITIVA"…)
+where upper(regexp_replace(r.estado, '[\s.]', '', 'g')) = 'CERRADO'
+  and upper(regexp_replace(r.situacion, '[\s.]', '', 'g')) = 'RESPPOSITIVA'
   and r.telefono_valido = true
   and r.whatsapp_eligible = true
   -- Solo estos motivos (sin importar mayúsculas, acentos ni espacios de más).

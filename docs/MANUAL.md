@@ -204,8 +204,8 @@ Un reclamo recibe el aviso por WhatsApp **solo si cumple todo esto**:
 
 | Regla | Dónde se controla |
 |---|---|
-| Estado = `Cerrado` | Panel y vista |
-| Situación = `Resp.Positiva` | Panel y vista |
+| Estado = `Cerrado` (sin importar mayúsculas, espacios ni puntos) | Panel y vista |
+| Situación = `Resp.Positiva` (también vale `Resp. Positiva`, `RESP.POSITIVA`…) | Panel y vista |
 | Motivo = `ALUMBRADO PUBLICO`, `ARBOL` o `LIMPIEZA Y RECOLECCION DOMICILIARIA` (sin importar mayúsculas, acentos ni espacios de más) | Panel y vista |
 | Teléfono válido | Panel (al importar o corregir) y vista |
 | Teléfono fuera de la lista de no elegibles | Panel y vista |
@@ -390,15 +390,25 @@ Sin `.env` arranca en **modo demo** con datos de ejemplo guardados en el navegad
 
 > 🚫 **Nunca** pongas en el panel la `service_role` key de Supabase ni el token de WhatsApp. Todo lo que empieza con `VITE_` queda visible para cualquiera que abra la página.
 
-### Publicar
+### Publicar (Cloudflare Pages)
 
-```bash
-npm run build
-```
+El panel está publicado en **Cloudflare Pages**, conectado al repo de GitHub: **cada merge a `main` se publica solo**.
 
-Genera la carpeta `dist/`, que se puede subir a cualquier hosting estático (Vercel, Netlify, Cloudflare Pages…). En el hosting:
-- cargá las tres variables `VITE_…`;
-- configurá que todas las rutas devuelvan `index.html`. Si no, al recargar `/monitoreo` da error 404. En **Vercel** ya está resuelto con el archivo `vercel.json` del repo. En Netlify hace falta un archivo `public/_redirects` con `/* /index.html 200`.
+Configuración del proyecto (por si hay que crearlo de nuevo: Workers & Pages → Create → Pages → Connect to Git):
+
+| Campo | Valor |
+|---|---|
+| Production branch | `main` |
+| Build command | `npm run build` |
+| Build output directory | `dist` |
+| Variables | `NODE_VERSION` = `22`, y las tres `VITE_…` |
+
+- Para cambiar una variable: proyecto → **Settings → Variables and Secrets**. Después hay que **volver a publicar** (Deployments → ⋯ → *Retry deployment*), porque se aplican al compilar.
+- Las otras ramas generan una URL de prueba (`rama.<proyecto>.pages.dev`). Piden login igual, pero no compartas esas URLs.
+- No hace falta configurar rutas: si no hay un `404.html`, Cloudflare Pages devuelve `index.html` para cualquier ruta.
+- En n8n, el nodo **Panel** del workflow *Mensajes del panel* tiene que tener en *Allowed Origins* la URL del panel (ej. `https://panel-reclamos.pages.dev`).
+
+Si algún día se usa otro hosting: `npm run build` genera la carpeta `dist/`. Hay que configurar que todas las rutas devuelvan `index.html`. En Vercel ya está resuelto con el `vercel.json` del repo.
 
 ---
 
@@ -452,7 +462,7 @@ Genera la carpeta `dist/`, que se puede subir a cualquier hosting estático (Ver
 | Problema | Causa probable | Qué hacer |
 |---|---|---|
 | "No se pudo reconocer el formato del archivo" | El archivo no tiene la columna **Nro. Reclamo** | Exportarlo de nuevo del sistema, sin modificarlo. |
-| Todos los reclamos dan "No elegible" | El motivo viene escrito distinto | Revisar los motivos con la consulta de la [sección 4](#4-cómo-agregar-o-quitar-un-motivo). |
+| Reclamos que deberían ser elegibles dan "No" | Algún dato viene distinto a lo esperado | En la importación, la columna **WhatsApp** muestra debajo del "No" el motivo (estado, situación, motivo o teléfono). |
 | Al enviar desde el chat: "Failed to fetch" | El workflow **Mensajes del panel** está apagado, o falta CORS | Activarlo. En el nodo `Panel`, *Allowed Origins* = `*` (o el dominio del panel). Usar la URL de **producción**, no la `/webhook-test/`. |
 | "No autorizado. Volvé a iniciar sesión" | Sesión vencida o anon key mal pegada en n8n | Cerrar sesión y volver a entrar; revisar el nodo **Verificar usuario**. |
 | "Pasaron más de 24 hs…" | Ventana cerrada | Mandar una plantilla. |
@@ -462,7 +472,8 @@ Genera la carpeta `dist/`, que se puede subir a cualquier hosting estático (Ver
 | n8n: "Could not find the 'x' column of '…' in the schema cache" | Falta esa columna, o Supabase no refrescó las columnas | Volver a ejecutar el `.sql` correspondiente (se puede correr varias veces). Termina con `notify pgrst, 'reload schema';`, que refresca las columnas. |
 | Conversaciones dice "Falta crear la vista de conversaciones" | No se ejecutó el SQL | Ejecutar `supabase/conversaciones.sql`. |
 | La pantalla dice "Falta crear la tabla…" | No se ejecutó el SQL | Ejecutar `supabase/chat.sql` o `supabase/exclusiones.sql`. |
-| Al recargar una página del panel da 404 | Falta la regla de rutas del hosting | Ver [Publicar](#publicar). |
+| El deploy de Cloudflare falla al compilar | Versión de Node vieja | Variable `NODE_VERSION` = `22`. |
+| Al recargar una página del panel da 404 | Falta la regla de rutas del hosting | Ver [Publicar](#publicar-cloudflare-pages). |
 
 Para cualquier error de n8n: **Executions** → abrir la ejecución en rojo → el nodo que falló muestra el detalle.
 
