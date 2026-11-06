@@ -390,15 +390,25 @@ Sin `.env` arranca en **modo demo** con datos de ejemplo guardados en el navegad
 
 > 🚫 **Nunca** pongas en el panel la `service_role` key de Supabase ni el token de WhatsApp. Todo lo que empieza con `VITE_` queda visible para cualquiera que abra la página.
 
-### Publicar
+### Publicar (Cloudflare Pages)
 
-```bash
-npm run build
-```
+El panel está publicado en **Cloudflare Pages**, conectado al repo de GitHub: **cada merge a `main` se publica solo**.
 
-Genera la carpeta `dist/`, que se puede subir a cualquier hosting estático (Vercel, Netlify, Cloudflare Pages…). En el hosting:
-- cargá las tres variables `VITE_…`;
-- configurá que todas las rutas devuelvan `index.html`. Si no, al recargar `/monitoreo` da error 404. En **Vercel** ya está resuelto con el archivo `vercel.json` del repo. En Netlify hace falta un archivo `public/_redirects` con `/* /index.html 200`.
+Configuración del proyecto (por si hay que crearlo de nuevo: Workers & Pages → Create → Pages → Connect to Git):
+
+| Campo | Valor |
+|---|---|
+| Production branch | `main` |
+| Build command | `npm run build` |
+| Build output directory | `dist` |
+| Variables | `NODE_VERSION` = `22`, y las tres `VITE_…` |
+
+- Para cambiar una variable: proyecto → **Settings → Variables and Secrets**. Después hay que **volver a publicar** (Deployments → ⋯ → *Retry deployment*), porque se aplican al compilar.
+- Las otras ramas generan una URL de prueba (`rama.<proyecto>.pages.dev`). Piden login igual, pero no compartas esas URLs.
+- No hace falta configurar rutas: si no hay un `404.html`, Cloudflare Pages devuelve `index.html` para cualquier ruta.
+- En n8n, el nodo **Panel** del workflow *Mensajes del panel* tiene que tener en *Allowed Origins* la URL del panel (ej. `https://panel-reclamos.pages.dev`).
+
+Si algún día se usa otro hosting: `npm run build` genera la carpeta `dist/`. Hay que configurar que todas las rutas devuelvan `index.html`. En Vercel ya está resuelto con el `vercel.json` del repo.
 
 ---
 
@@ -462,7 +472,8 @@ Genera la carpeta `dist/`, que se puede subir a cualquier hosting estático (Ver
 | n8n: "Could not find the 'x' column of '…' in the schema cache" | Falta esa columna, o Supabase no refrescó las columnas | Volver a ejecutar el `.sql` correspondiente (se puede correr varias veces). Termina con `notify pgrst, 'reload schema';`, que refresca las columnas. |
 | Conversaciones dice "Falta crear la vista de conversaciones" | No se ejecutó el SQL | Ejecutar `supabase/conversaciones.sql`. |
 | La pantalla dice "Falta crear la tabla…" | No se ejecutó el SQL | Ejecutar `supabase/chat.sql` o `supabase/exclusiones.sql`. |
-| Al recargar una página del panel da 404 | Falta la regla de rutas del hosting | Ver [Publicar](#publicar). |
+| El deploy de Cloudflare falla al compilar | Versión de Node vieja | Variable `NODE_VERSION` = `22`. |
+| Al recargar una página del panel da 404 | Falta la regla de rutas del hosting | Ver [Publicar](#publicar-cloudflare-pages). |
 
 Para cualquier error de n8n: **Executions** → abrir la ejecución en rojo → el nodo que falló muestra el detalle.
 
