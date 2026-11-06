@@ -23,8 +23,9 @@ drop policy if exists "usuarios autenticados leen" on public.whatsapp_mensajes;
 create policy "usuarios autenticados leen" on public.whatsapp_mensajes for select to authenticated using (true);
 -- Solo n8n escribe (con la service_role key, que no pasa por RLS). El panel no inserta directamente.
 
--- Para el workflow de respuestas: la ÚLTIMA notificación enviada a cada teléfono.
--- (El nodo "Buscar notificación" actual no garantiza traer la más reciente.)
+-- Vista de ayuda: la ÚLTIMA notificación enviada a cada teléfono.
+-- (El workflow Respuestas-bot ya no la necesita: consulta whatsapp_notificaciones ordenando por fecha.
+--  Se deja para consultas manuales.)
 create or replace view public.ultima_notificacion_por_telefono as
 select distinct on (telefono_destino) *
 from public.whatsapp_notificaciones
