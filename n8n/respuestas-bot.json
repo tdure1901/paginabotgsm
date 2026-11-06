@@ -194,16 +194,8 @@
         "operation": "getAll",
         "tableId": "ultima_notificacion_por_telefono",
         "limit": 1,
-        "matchType": "allFilters",
-        "filters": {
-          "conditions": [
-            {
-              "keyName": "telefono_destino",
-              "condition": "eq",
-              "keyValue": "={{ $json.telefono }}"
-            }
-          ]
-        }
+        "filterType": "string",
+        "filterString": "=telefono_destino=eq.{{ $json.telefono }}"
       },
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
@@ -219,7 +211,7 @@
           "name": "Supabase account"
         }
       },
-      "notes": "Ahora lee la vista ultima_notificacion_por_telefono (siempre la más reciente)",
+      "notes": "Lee la vista ultima_notificacion_por_telefono (siempre la más reciente). El filtro va como texto para no depender de la lista de columnas de n8n.",
       "notesInFlow": true
     },
     {
