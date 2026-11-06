@@ -35,3 +35,6 @@ order by telefono_destino, coalesce(notificado_at, created_at) desc;
 alter publication supabase_realtime add table public.whatsapp_mensajes;
 alter publication supabase_realtime add table public.whatsapp_notificaciones;
 alter publication supabase_realtime add table public.reclamos;
+
+-- Que la API de Supabase vea las columnas nuevas (evita "Could not find the 'x' column ... in the schema cache")
+notify pgrst, 'reload schema';

@@ -10,6 +10,7 @@ import { MODO_DEMO, escucharSesion, obtenerSesion } from "./lib/api";
 import CargaPage from "./pages/CargaPage";
 import MonitoreoPage from "./pages/MonitoreoPage";
 import ConversacionesPage from "./pages/ConversacionesPage";
+import TelefonosPage from "./pages/TelefonosPage";
 
 function App() {
   const [listo, setListo] = useState(MODO_DEMO);
@@ -34,6 +35,7 @@ function App() {
           <Route index element={<Navigate to="/monitoreo" replace />} />
           <Route path="/carga" element={<CargaPage />} />
           <Route path="/monitoreo" element={<MonitoreoPage />} />
+          <Route path="/telefonos" element={<TelefonosPage />} />
           <Route path="/conversaciones" element={<ConversacionesPage />} />
           <Route path="/conversaciones/:reclamoId" element={<ConversacionesPage />} />
           <Route path="*" element={<Navigate to="/monitoreo" replace />} />

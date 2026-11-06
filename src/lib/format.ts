@@ -17,8 +17,11 @@ export function hora(iso: string) {
 }
 export function telefonoLindo(t: string | null) {
   if (!t) return "—";
-  const m = t.match(/^549(\d{2,4})(\d{6,8})$/);
-  return m ? `+54 9 ${t.slice(3, 6)} ${t.slice(6, 9)}-${t.slice(9)}` : t;
+  if (!/^549\d{10}$/.test(t)) return t;
+  const n = t.slice(3);
+  // AMBA (11): +54 9 11 XXXX-XXXX · resto: característica de 3 dígitos
+  if (n.startsWith("11")) return `+54 9 11 ${n.slice(2, 6)}-${n.slice(6)}`;
+  return `+54 9 ${n.slice(0, 3)} ${n.slice(3, 6)}-${n.slice(6)}`;
 }
 export const v = (x: string | null | undefined) => (x == null || x === "" ? "—" : x);
 

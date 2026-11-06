@@ -1,6 +1,7 @@
 import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
 import { generarDemo } from "./demo";
-import type { MensajeChat, Notificacion, Reclamo, ReclamoImport } from "./types";
+import type { Exclusion, MensajeChat, Notificacion, Reclamo, ReclamoImport } from "./types";
+import { esElegible, normalizarTelefono } from "./importacion";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) as string | undefined;
@@ -10,12 +11,12 @@ export const supabase: SupabaseClient | null = SUPABASE_URL && SUPABASE_KEY ? cr
 export const MODO_DEMO = !supabase;
 export const CHAT_MANUAL_HABILITADO = MODO_DEMO || !!N8N_MENSAJE;
 
-export interface Datos {
+/** Contenido completo del modo demo (se guarda en el navegador) */
+export interface Demo {
   reclamos: Reclamo[];
   notificaciones: Notificacion[];
   mensajes: MensajeChat[];
-  /** false si la tabla whatsapp_mensajes todavía no existe */
-  chatDisponible: boolean;
+  exclusiones: Exclusion[];
 }
 
 /* ---------------- Sesión ---------------- */
@@ -39,13 +40,11 @@ export async function salir() {
 
 /* ---------------- Modo demo (localStorage) ---------------- */
 
-const LS_KEY = "reclamos-bot-demo-v3";
-type Demo = Omit<Datos, "chatDisponible">;
-
-function leerDemo(): Demo {
+const LS_KEY = "reclamos-bot-demo-v5";
+export function leerDemo(): Demo {
   try {
     const raw = localStorage.getItem(LS_KEY);
-    if (raw) return JSON.parse(raw) as Demo;
+    if (raw) return { exclusiones: [], ...JSON.parse(raw) } as Demo;
   } catch {
     /* ignorar */
   }
@@ -59,65 +58,6 @@ function guardarDemo(d: Demo) {
   } catch {
     /* ignorar */
   }
-}
-
-/* ---------------- Lectura ---------------- */
-
-const str = <T extends { id: unknown; reclamo_id?: unknown }>(x: T) =>
-  ({ ...x, id: String(x.id), ...(x.reclamo_id !== undefined ? { reclamo_id: String(x.reclamo_id) } : {}) }) as T;
-
-async function traerTodo<T>(tabla: string, orden: string, asc: boolean): Promise<T[]> {
-  const out: T[] = [];
-  const PAG = 1000;
-  for (let desde = 0; ; desde += PAG) {
-    const { data, error } = await supabase!
-      .from(tabla)
-      .select("*")
-      .order(orden, { ascending: asc })
-      .range(desde, desde + PAG - 1);
-    if (error) throw error;
-    out.push(...(data as T[]));
-    if (!data || data.length < PAG) break;
-  }
-  return out;
-}
-
-export async function cargarDatos(): Promise<Datos> {
-  if (!supabase) return { ...leerDemo(), chatDisponible: true };
-  const [reclamos, notificaciones] = await Promise.all([
-    traerTodo<Reclamo>("reclamos", "numero_reclamo", false),
-    traerTodo<Notificacion>("whatsapp_notificaciones", "created_at", true),
-  ]);
-  let mensajes: MensajeChat[] = [];
-  let chatDisponible = true;
-  try {
-    mensajes = await traerTodo<MensajeChat>("whatsapp_mensajes", "created_at", true);
-  } catch {
-    chatDisponible = false; // la tabla del chat todavía no se creó
-  }
-  return {
-    reclamos: reclamos.map(str),
-    notificaciones: notificaciones.map(str),
-    mensajes: mensajes.map(str),
-    chatDisponible,
-  };
-}
-
-export function suscribirCambios(onChange: () => void): () => void {
-  if (!supabase) return () => {};
-  let t: ReturnType<typeof setTimeout> | undefined;
-  const debounced = () => {
-    clearTimeout(t);
-    t = setTimeout(onChange, 400);
-  };
-  const ch = supabase.channel("panel-reclamos");
-  for (const table of ["reclamos", "whatsapp_notificaciones", "whatsapp_mensajes"])
-    ch.on("postgres_changes", { event: "*", schema: "public", table }, debounced);
-  ch.subscribe();
-  return () => {
-    clearTimeout(t);
-    supabase!.removeChannel(ch);
-  };
 }
 
 /* ---------------- Importación ---------------- */
@@ -153,6 +93,78 @@ export async function importarReclamos(validos: ReclamoImport[], progreso?: (hec
     progreso?.(Math.min(i + chunk.length, validos.length), validos.length);
   }
   return { procesados, lotesFallidos };
+}
+
+/* ---------------- Teléfonos y lista de no elegibles ---------------- */
+
+async function emailActual() {
+  return supabase ? ((await supabase.auth.getUser()).data.user?.email ?? null) : "demo";
+}
+
+/** Agrega un número a la lista de no elegibles y saca de la cola a sus reclamos */
+export async function agregarExclusion(telefonoCrudo: string, motivo: string) {
+  const t = normalizarTelefono(telefonoCrudo);
+  if (!t.valido || !t.normalizado) throw new Error("El teléfono no es válido.");
+  const tel = t.normalizado;
+  const fila: Exclusion = { telefono: tel, motivo: motivo.trim() || null, created_at: new Date().toISOString(), creado_por: await emailActual() };
+  if (!supabase) {
+    const d = leerDemo();
+    d.exclusiones = [fila, ...d.exclusiones.filter((e) => e.telefono !== tel)];
+    d.reclamos.forEach((r) => {
+      if (r.telefono_normalizado === tel) r.whatsapp_eligible = false;
+    });
+    guardarDemo(d);
+    return;
+  }
+  const { error } = await supabase.from("whatsapp_exclusiones").upsert({ telefono: tel, motivo: fila.motivo, creado_por: fila.creado_por });
+  if (error) throw error;
+  const { error: e2 } = await supabase.from("reclamos").update({ whatsapp_eligible: false }).eq("telefono_normalizado", tel);
+  if (e2) throw e2;
+}
+
+/** Quita un número de la lista y vuelve a habilitar los reclamos que cumplen las reglas */
+export async function quitarExclusion(tel: string, reclamos: Reclamo[]) {
+  const habilitar = reclamos
+    .filter((r) => r.telefono_normalizado === tel && esElegible(r, { normalizado: tel, valido: r.telefono_valido }))
+    .map((r) => r.id);
+  if (!supabase) {
+    const d = leerDemo();
+    d.exclusiones = d.exclusiones.filter((e) => e.telefono !== tel);
+    d.reclamos.forEach((r) => {
+      if (habilitar.includes(r.id)) r.whatsapp_eligible = true;
+    });
+    guardarDemo(d);
+    return;
+  }
+  const { error } = await supabase.from("whatsapp_exclusiones").delete().eq("telefono", tel);
+  if (error) throw error;
+  if (habilitar.length) {
+    const { error: e2 } = await supabase.from("reclamos").update({ whatsapp_eligible: true }).in("id", habilitar);
+    if (e2) throw e2;
+  }
+}
+
+/** Corrige el teléfono de un reclamo ya cargado y recalcula si es elegible */
+export async function actualizarTelefono(r: Reclamo, nuevo: string, exclusiones: Set<string>) {
+  const original = nuevo.trim() || null;
+  const t = normalizarTelefono(original);
+  const cambios = {
+    telefono_original: original,
+    telefono_normalizado: t.normalizado,
+    telefono_valido: t.valido,
+    whatsapp_eligible: esElegible(r, t, new Map([...exclusiones].map((x) => [x, ""]))),
+    updated_at: new Date().toISOString(),
+  };
+  if (!supabase) {
+    const d = leerDemo();
+    const x = d.reclamos.find((y) => y.id === r.id);
+    if (x) Object.assign(x, cambios);
+    guardarDemo(d);
+    return t.valido;
+  }
+  const { error } = await supabase.from("reclamos").update(cambios).eq("id", r.id);
+  if (error) throw error;
+  return t.valido;
 }
 
 /* ---------------- Chat ---------------- */

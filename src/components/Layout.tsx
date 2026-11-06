@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { BarChart3, MessagesSquare, UploadCloud, Bot, FlaskConical, LogOut, AlertTriangle } from "lucide-react";
+import { BarChart3, MessagesSquare, UploadCloud, Bot, FlaskConical, LogOut, AlertTriangle, Phone } from "lucide-react";
 import { MODO_DEMO, salir } from "../lib/api";
 import { useDatos } from "../lib/useDatos";
 
@@ -7,11 +7,13 @@ const NAV = [
   { to: "/carga", label: "Carga de datos", icon: UploadCloud },
   { to: "/monitoreo", label: "Monitoreo", icon: BarChart3 },
   { to: "/conversaciones", label: "Conversaciones", icon: MessagesSquare },
+  { to: "/telefonos", label: "Teléfonos", icon: Phone },
 ];
 
 export default function Layout({ email }: { email?: string }) {
-  const { reclamos, noLeidos: nl, error } = useDatos();
-  const noLeidos = reclamos.reduce((a, r) => a + nl(r.id), 0);
+  const { recientes, noLeido, error, telInvalidos } = useDatos();
+  const noLeidos = recientes.filter(noLeido).length;
+  const telMalos = telInvalidos.length;
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
@@ -40,6 +42,11 @@ export default function Layout({ email }: { email?: string }) {
               <span className="flex-1">{label}</span>
               {to === "/conversaciones" && noLeidos > 0 && (
                 <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">{noLeidos}</span>
+              )}
+              {to === "/telefonos" && telMalos > 0 && (
+                <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-white" title="Teléfonos para corregir">
+                  {telMalos}
+                </span>
               )}
             </NavLink>
           ))}

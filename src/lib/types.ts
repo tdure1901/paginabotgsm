@@ -55,3 +55,29 @@ export interface MensajeChat {
   tipo?: "texto" | "plantilla" | null;
   enviado_por?: string | null;
 }
+
+/** Fila de `whatsapp_exclusiones`: teléfonos a los que nunca se les manda el aviso */
+export interface Exclusion {
+  telefono: string;
+  motivo: string | null;
+  created_at: string;
+  creado_por: string | null;
+}
+
+/** Fila de la vista `conversaciones`: un chat con su último mensaje */
+export interface Conversacion {
+  reclamo_id: string;
+  numero_reclamo: string;
+  solicitante: string | null;
+  telefono_normalizado: string | null;
+  motivo: string | null;
+  submotivo: string | null;
+  ultima_fecha: string;
+  ultimo_contenido: string | null;
+  ultima_direccion: "saliente" | "entrante";
+  ultimo_origen: "bot" | "operador" | "vecino";
+  ultima_entrada: string | null;
+  notif_estado: string | null;
+  notif_respuesta: string | null;
+  categoria: "pendiente" | "si" | "no" | "sin_respuesta" | "respondido_otro" | "error" | "otro" | null;
+}

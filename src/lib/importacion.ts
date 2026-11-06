@@ -18,8 +18,12 @@ export interface FilaAnalizada {
   advertencias: string[];
 }
 
+/** Teléfonos (normalizados) a los que no se les avisa nunca → motivo */
+export type Exclusiones = Map<string, string>;
+
 export interface Analisis {
   filas: FilaAnalizada[];
+  exclusiones: Exclusiones;
   validos: ReclamoImport[];
   stats: {
     total: number;
@@ -29,6 +33,9 @@ export interface Analisis {
     telValidos: number;
     telInvalidos: number;
     elegibles: number;
+    excluidos: number;
+    /** Cerrados con Resp.Positiva que no se pueden avisar solo porque el teléfono es inválido */
+    telARevisar: number;
     duplicadosReclamo: number;
     telefonosRepetidos: number;
   };
@@ -177,14 +184,70 @@ const normalizarNro = (x: string | undefined) =>
     .replace(/\s+/g, " ")
     .trim() || null;
 
-/** Se envía WhatsApp solo a reclamos cerrados con respuesta positiva y teléfono válido */
-export function esElegible(estado: string | null, situacion: string | null, telValido: boolean) {
-  return (estado ?? "").trim() === "Cerrado" && (situacion ?? "").trim() === "Resp.Positiva" && telValido;
+/** Motivos a los que se les manda el aviso (los mismos que filtra la vista reclamos_para_notificar) */
+export const MOTIVOS_ELEGIBLES = ["ALUMBRADO PUBLICO", "ARBOL", "LIMPIEZA Y RECOLECCION DOMICILIARIA"];
+
+/** "Alumbrado Público " → "ALUMBRADO PUBLICO" (sin acentos, mayúsculas y espacios simples) */
+export function normalizarMotivo(motivo: string | null) {
+  return (motivo ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
+export function motivoElegible(motivo: string | null) {
+  return MOTIVOS_ELEGIBLES.map(normalizarMotivo).includes(normalizarMotivo(motivo));
+}
+
+/** El reclamo está en condiciones de recibir el aviso (sin mirar el teléfono) */
+export function esCandidato(estado: string | null, situacion: string | null, motivo: string | null) {
+  return (estado ?? "").trim() === "Cerrado" && (situacion ?? "").trim() === "Resp.Positiva" && motivoElegible(motivo);
+}
+
+/**
+ * Reglas de elegibilidad para WhatsApp (las mismas que usa la vista reclamos_para_notificar):
+ * Estado "Cerrado" + Situación "Resp.Positiva" + motivo habilitado + teléfono válido + fuera de la lista de no elegibles.
+ */
+export function esElegible(
+  r: { estado: string | null; situacion: string | null; motivo: string | null },
+  tel: { normalizado: string | null; valido: boolean },
+  exclusiones?: Exclusiones,
+) {
+  return esCandidato(r.estado, r.situacion, r.motivo) && tel.valido && !(tel.normalizado && exclusiones?.has(tel.normalizado));
+}
+
+/**
+ * Propone una corrección para teléfonos casi bien cargados (pensado para AMBA, característica 11):
+ * - 8 dígitos → falta el 11 adelante
+ * - 9 dígitos que empiezan con 1 (pero no 11) → falta un 1
+ * - 15 + 8 dígitos → se cargó el 15 en vez del 11
+ */
+export function sugerirTelefono(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  let d = raw.replace(/\D/g, "");
+  if (d.startsWith("54")) d = d.slice(2).replace(/^9/, "");
+  d = d.replace(/^0+/, "");
+  const cands: string[] = [];
+  if (d.length === 8 && !d.startsWith("15")) cands.push("11" + d);
+  if (d.length === 9 && d.startsWith("1") && !d.startsWith("11") && !d.startsWith("15")) cands.push("1" + d);
+  if (d.length === 10 && d.startsWith("15")) cands.push("11" + d.slice(2));
+  if (d.length === 11 && d.startsWith("1115")) cands.push("11" + d.slice(4));
+  for (const c of cands) if (normalizarTelefono(c).valido) return c;
+  return null;
+}
+
+function motivoExclusion(tel: string | null, exclusiones: Exclusiones) {
+  return tel && exclusiones.has(tel) ? `Teléfono en lista de no elegibles${exclusiones.get(tel) ? ` (${exclusiones.get(tel)})` : ""}` : null;
 }
 
 /* ---------------- Análisis ---------------- */
 
-export function analizar(rows: FilaCruda[], filas: number[]): Analisis {
+/** Teléfono válido que ya está en la base para cada Nro. de reclamo (para no pisar correcciones) */
+export type TelefonosEnBase = Map<string, { original: string | null; normalizado: string }>;
+
+export function analizar(rows: FilaCruda[], filas: number[], exclusiones: Exclusiones = new Map(), enBase: TelefonosEnBase = new Map()): Analisis {
   const res: FilaAnalizada[] = rows.map((row, i) => {
     const fila = filas[i] ?? i + 2;
     const a: Partial<Record<keyof ReclamoImport, string | null>> = {};
@@ -200,23 +263,37 @@ export function analizar(rows: FilaCruda[], filas: number[]): Analisis {
       if (r.invalida) adv.push(`Fecha inválida en ${f}: "${a[f]}"`);
       a[f] = r.value;
     }
-    const tel = normalizarTelefono(a.telefono_original);
+    let tel = normalizarTelefono(a.telefono_original);
+    const previo = enBase.get(nro);
+    if (!tel.valido && previo) {
+      // El archivo trae el teléfono mal, pero ya se había corregido en el panel: se conserva
+      adv.push(`Se mantiene el teléfono corregido (${previo.original ?? previo.normalizado}); el archivo trae "${a.telefono_original ?? ""}"`);
+      a.telefono_original = previo.original;
+      tel = { normalizado: previo.normalizado, valido: true };
+    }
     if (!tel.valido) adv.push(a.telefono_original ? `Teléfono inválido: "${a.telefono_original}"` : "Sin teléfono");
     const data = {
       ...(Object.fromEntries(Object.values(COLUMNAS).map((c) => [c, a[c] ?? null])) as Record<string, string | null>),
       numero_reclamo: nro,
       telefono_normalizado: tel.normalizado,
       telefono_valido: tel.valido,
-      whatsapp_eligible: esElegible(a.estado ?? null, a.situacion ?? null, tel.valido),
+      whatsapp_eligible: esElegible({ estado: a.estado ?? null, situacion: a.situacion ?? null, motivo: a.motivo ?? null }, tel, exclusiones),
     } as ReclamoImport;
     return { fila, status: "VALIDA", numero_reclamo: nro, data, advertencias: adv };
   });
-  return recalcular(res);
+  return recalcular(res, exclusiones);
 }
 
 /** Recalcula advertencias de teléfonos repetidos, estados y estadísticas */
-export function recalcular(entrada: FilaAnalizada[]): Analisis {
-  const filas = entrada.map((f) => ({ ...f, advertencias: f.advertencias.filter((a) => !a.startsWith("Teléfono repetido ")) }));
+export function recalcular(entrada: FilaAnalizada[], exclusiones: Exclusiones): Analisis {
+  const filas = entrada.map((f) => {
+    const advertencias = f.advertencias.filter((a) => !a.startsWith("Teléfono repetido ") && !a.startsWith("Teléfono en lista de no elegibles"));
+    if (!f.data) return { ...f, advertencias };
+    const tel = { normalizado: f.data.telefono_normalizado, valido: f.data.telefono_valido };
+    const exc = motivoExclusion(tel.normalizado, exclusiones);
+    if (exc) advertencias.push(exc);
+    return { ...f, advertencias, data: { ...f.data, whatsapp_eligible: esElegible(f.data, tel, exclusiones) } };
+  });
   const cuenta = new Map<string, number>();
   for (const f of filas) {
     const t = f.data?.telefono_normalizado;
@@ -238,6 +315,7 @@ export function recalcular(entrada: FilaAnalizada[]): Analisis {
   const validos = [...unicos.values()];
   return {
     filas,
+    exclusiones,
     validos,
     stats: {
       total: filas.length,
@@ -247,6 +325,8 @@ export function recalcular(entrada: FilaAnalizada[]): Analisis {
       telValidos: validos.filter((d) => d.telefono_valido).length,
       telInvalidos: validos.filter((d) => !d.telefono_valido).length,
       elegibles: validos.filter((d) => d.whatsapp_eligible).length,
+      excluidos: validos.filter((d) => !!d.telefono_normalizado && exclusiones.has(d.telefono_normalizado)).length,
+      telARevisar: validos.filter((d) => !d.telefono_valido && esCandidato(d.estado, d.situacion, d.motivo)).length,
       duplicadosReclamo: conData - validos.length,
       telefonosRepetidos: [...cuenta.values()].filter((n) => n > 1).length,
     },
@@ -254,7 +334,7 @@ export function recalcular(entrada: FilaAnalizada[]): Analisis {
 }
 
 export function quitarFilas(a: Analisis, nros: Set<number>): Analisis {
-  return recalcular(a.filas.filter((f) => !nros.has(f.fila)));
+  return recalcular(a.filas.filter((f) => !nros.has(f.fila)), a.exclusiones);
 }
 
 export function corregirTelefono(a: Analisis, fila: number, nuevo: string): Analisis {
@@ -273,9 +353,15 @@ export function corregirTelefono(a: Analisis, fila: number, nuevo: string): Anal
           telefono_original: raw,
           telefono_normalizado: tel.normalizado,
           telefono_valido: tel.valido,
-          whatsapp_eligible: esElegible(f.data.estado, f.data.situacion, tel.valido),
+          whatsapp_eligible: esElegible(f.data, tel, a.exclusiones),
         },
       };
     }),
+    a.exclusiones,
   );
+}
+
+/** Aplica una lista de exclusión nueva (por ejemplo, si se excluye un número durante la revisión) */
+export function conExclusiones(a: Analisis, exclusiones: Exclusiones): Analisis {
+  return recalcular(a.filas, exclusiones);
 }

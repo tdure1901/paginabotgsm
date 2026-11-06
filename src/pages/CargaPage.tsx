@@ -1,12 +1,14 @@
-import { useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Pencil, Trash2, UploadCloud, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Pencil, Trash2, UploadCloud, X, PhoneOff, Wand2, Ban } from "lucide-react";
 import { PageHeader } from "../components/ui";
-import { analizar, corregirTelefono, leerArchivo, quitarFilas, type Analisis, type FilaAnalizada } from "../lib/importacion";
-import { importarReclamos, type ResultadoImport } from "../lib/api";
+import { MOTIVOS_ELEGIBLES, analizar, conExclusiones, corregirTelefono, esCandidato, leerArchivo, quitarFilas, sugerirTelefono, type Analisis, type FilaAnalizada } from "../lib/importacion";
+import { agregarExclusion, importarReclamos, type ResultadoImport } from "../lib/api";
 import { useDatos } from "../lib/useDatos";
+import { buscarExistentes } from "../lib/consultas";
 import { telefonoLindo, v } from "../lib/format";
+import { normalizarTelefono } from "../lib/importacion";
 
-type Filtro = "todos" | "validos" | "adv" | "rech" | "telinv" | "eleg";
+type Filtro = "todos" | "validos" | "adv" | "rech" | "telinv" | "eleg" | "excl";
 const FILTROS: { id: Filtro; label: string; test: (f: FilaAnalizada) => boolean }[] = [
   { id: "todos", label: "Todos", test: () => true },
   { id: "validos", label: "Válidos", test: (f) => f.status === "VALIDA" },
@@ -14,6 +16,7 @@ const FILTROS: { id: Filtro; label: string; test: (f: FilaAnalizada) => boolean 
   { id: "rech", label: "Rechazados", test: (f) => f.status === "RECHAZADA" },
   { id: "telinv", label: "Teléfono inválido", test: (f) => !!f.data && !f.data.telefono_valido },
   { id: "eleg", label: "Elegibles WhatsApp", test: (f) => !!f.data?.whatsapp_eligible },
+  { id: "excl", label: "No elegibles (lista)", test: (f) => f.advertencias.some((a) => a.startsWith("Teléfono en lista de no elegibles")) },
 ];
 
 const BADGE: Record<FilaAnalizada["status"], [string, string]> = {
@@ -32,7 +35,12 @@ function Stat({ label, valor, tono = "text-slate-900" }: { label: string; valor:
 }
 
 export default function CargaPage() {
-  const { recargar, reclamos } = useDatos();
+  const { recargar, exclusiones } = useDatos();
+  // Nro. de reclamo del archivo que ya están en la base (se consulta solo eso, no toda la tabla)
+  const [existentes, setExistentes] = useState<Set<string>>(new Set());
+  const mapaExcl = useMemo(() => new Map(exclusiones.map((e) => [e.telefono, e.motivo ?? ""])), [exclusiones]);
+  const [excluyendo, setExcluyendo] = useState<{ tel: string; nombre: string; motivo: string } | null>(null);
+  const [verTodosInvalidos, setVerTodosInvalidos] = useState(false);
   const [archivo, setArchivo] = useState<File | null>(null);
   const [analisis, setAnalisis] = useState<Analisis | null>(null);
   const [filtro, setFiltro] = useState<Filtro>("todos");
@@ -44,7 +52,6 @@ export default function CargaPage() {
   const [error, setError] = useState("");
   const [resultado, setResultado] = useState<ResultadoImport | null>(null);
 
-  const existentes = useMemo(() => new Set(reclamos.map((r) => r.numero_reclamo)), [reclamos]);
 
   async function procesar(file: File) {
     setLeyendo(true);
@@ -53,7 +60,15 @@ export default function CargaPage() {
     try {
       const { rows, filas } = await leerArchivo(file);
       setArchivo(file);
-      setAnalisis(analizar(rows, filas));
+      // 1) Primer análisis para obtener los Nro. de reclamo ya normalizados
+      const previo = analizar(rows, filas, mapaExcl);
+      // 2) Se consulta cuáles ya existen y con qué teléfono, para no pisar teléfonos corregidos
+      const ex = await buscarExistentes(previo.validos.map((r) => r.numero_reclamo));
+      setExistentes(new Set(ex.keys()));
+      const enBase = new Map(
+        [...ex.values()].filter((r) => r.telefono_valido && r.telefono_normalizado).map((r) => [r.numero_reclamo, { original: r.telefono_original, normalizado: r.telefono_normalizado! }]),
+      );
+      setAnalisis(analizar(rows, filas, mapaExcl, enBase));
       setFiltro("todos");
       setSel(new Set());
     } catch (e) {
@@ -84,6 +99,25 @@ export default function CargaPage() {
       setProgreso(null);
     }
   }
+
+  // Si la lista de no elegibles cambia mientras se revisa el archivo, se recalcula
+  useEffect(() => {
+    setAnalisis((a) => (a ? conExclusiones(a, mapaExcl) : a));
+  }, [mapaExcl]);
+
+  async function confirmarExclusion() {
+    if (!excluyendo) return;
+    try {
+      await agregarExclusion(excluyendo.tel, excluyendo.motivo);
+      setExcluyendo(null);
+      await recargar();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  const invalidos = analisis ? analisis.filas.filter((f) => f.data && !f.data.telefono_valido) : [];
+  const aRevisar = verTodosInvalidos ? invalidos : invalidos.filter((f) => esCandidato(f.data!.estado, f.data!.situacion, f.data!.motivo));
 
   const visibles = analisis ? analisis.filas.filter(FILTROS.find((f) => f.id === filtro)!.test) : [];
   const nuevos = analisis ? analisis.validos.filter((r) => !existentes.has(r.numero_reclamo)).length : 0;
@@ -161,7 +195,7 @@ export default function CargaPage() {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-8">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5 xl:grid-cols-9">
               <Stat label="Filas" valor={analisis.stats.total} />
               <Stat label="Válidas" valor={analisis.stats.validos} tono="text-emerald-700" />
               <Stat label="Con advertencias" valor={analisis.stats.conAdvertencias} tono="text-amber-600" />
@@ -169,8 +203,35 @@ export default function CargaPage() {
               <Stat label="Tel. válidos" valor={analisis.stats.telValidos} />
               <Stat label="Tel. inválidos" valor={analisis.stats.telInvalidos} tono="text-rose-600" />
               <Stat label="Elegibles WhatsApp" valor={analisis.stats.elegibles} tono="text-brand-700" />
+              <Stat label="No elegibles (lista)" valor={analisis.stats.excluidos} tono="text-slate-500" />
               <Stat label="Nro. duplicados" valor={analisis.stats.duplicadosReclamo} />
             </div>
+
+            {invalidos.length > 0 && (
+              <div className="card overflow-hidden border-amber-200">
+                <div className="flex flex-wrap items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-3">
+                  <PhoneOff size={16} className="text-amber-700" />
+                  <h3 className="text-sm font-semibold text-amber-900">Teléfonos a revisar</h3>
+                  <span className="text-xs text-amber-800">
+                    {analisis.stats.telARevisar === 1 ? "1 reclamo cerrado con respuesta positiva no se puede" : `${analisis.stats.telARevisar} reclamos cerrados con respuesta positiva no se pueden`} avisar porque el teléfono está mal cargado. Corregilos antes de importar.
+                  </span>
+                  <label className="ml-auto flex items-center gap-1.5 text-xs text-amber-900">
+                    <input type="checkbox" className="accent-teal-700" checked={verTodosInvalidos} onChange={(e) => setVerTodosInvalidos(e.target.checked)} />
+                    Ver todos los inválidos ({invalidos.length})
+                  </label>
+                </div>
+                <div className="max-h-80 divide-y divide-slate-100 overflow-y-auto">
+                  {aRevisar.map((f) => (
+                    <FilaTelefono
+                      key={f.fila}
+                      fila={f}
+                      onGuardar={(v) => setAnalisis(corregirTelefono(analisis, f.fila, v))}
+                    />
+                  ))}
+                  {!aRevisar.length && <div className="p-4 text-center text-sm text-slate-500">No hay reclamos para avisar con el teléfono mal cargado. 🎉</div>}
+                </div>
+              </div>
+            )}
 
             <div className="card overflow-hidden">
               <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 px-4 py-3">
@@ -225,6 +286,7 @@ export default function CargaPage() {
                       <th className="px-3 py-2">Estado / Situación</th>
                       <th className="px-3 py-2">WhatsApp</th>
                       <th className="px-3 py-2">Advertencias</th>
+                      <th className="px-3 py-2"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -280,6 +342,17 @@ export default function CargaPage() {
                         </td>
                         <td className="px-3 py-2 text-xs">{f.data ? (f.data.whatsapp_eligible ? <span className="font-medium text-brand-700">Sí</span> : <span className="text-slate-400">No</span>) : "—"}</td>
                         <td className="min-w-56 px-3 py-2 text-xs text-amber-700">{f.advertencias.join(" · ")}</td>
+                        <td className="px-3 py-2">
+                          {f.data?.telefono_valido && !mapaExcl.has(f.data.telefono_normalizado!) && (
+                            <button
+                              className="text-slate-300 hover:text-rose-600"
+                              title="Agregar el teléfono a la lista de no elegibles"
+                              onClick={() => setExcluyendo({ tel: f.data!.telefono_normalizado!, nombre: f.data!.solicitante ?? "", motivo: "" })}
+                            >
+                              <Ban size={15} />
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -289,11 +362,105 @@ export default function CargaPage() {
               </div>
             </div>
             <p className="text-xs text-slate-500">
-              Se marcan como <b>elegibles para WhatsApp</b> los reclamos con Estado “Cerrado”, Situación “Resp.Positiva” y teléfono válido. Si el Nro. de reclamo ya existe, se actualiza.
+              Se marcan como <b>elegibles para WhatsApp</b> los reclamos con Estado “Cerrado”, Situación “Resp.Positiva”, motivo {MOTIVOS_ELEGIBLES.map((m) => `“${m}”`).join(", ")}, teléfono válido y que no estén en la lista de no elegibles. Con <Ban size={12} className="inline" /> agregás un teléfono a esa lista. Si el Nro. de reclamo ya existe, se actualiza.
             </p>
           </>
         )}
       </div>
+
+      {excluyendo && <ModalExclusion valor={excluyendo} onChange={setExcluyendo} onConfirmar={confirmarExclusion} />}
     </>
+  );
+}
+
+export function ModalExclusion({
+  valor,
+  onChange,
+  onConfirmar,
+}: {
+  valor: { tel: string; nombre: string; motivo: string };
+  onChange: (v: { tel: string; nombre: string; motivo: string } | null) => void;
+  onConfirmar: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/30 p-4" onClick={() => onChange(null)}>
+      <form
+        className="card w-full max-w-sm space-y-3 p-5"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={(e) => {
+          e.preventDefault();
+          onConfirmar();
+        }}
+      >
+        <h3 className="flex items-center gap-2 font-semibold text-slate-900">
+          <Ban size={18} className="text-rose-600" /> No avisar a este número
+        </h3>
+        <p className="text-sm text-slate-600">
+          <b>{telefonoLindo(valor.tel)}</b>
+          {valor.nombre && <> · {valor.nombre}</>}
+          <br />
+          Ningún reclamo con este teléfono va a recibir el WhatsApp, ni los de este archivo ni los ya cargados.
+        </p>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-slate-600">Motivo (opcional)</span>
+          <input autoFocus className="input" placeholder="Ej: Director de Alumbrado" value={valor.motivo} onChange={(e) => onChange({ ...valor, motivo: e.target.value })} />
+        </label>
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn-ghost" onClick={() => onChange(null)}>
+            Cancelar
+          </button>
+          <button className="btn bg-rose-600 text-white hover:bg-rose-700">Agregar a la lista</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/** Fila editable para corregir un teléfono, con sugerencia automática */
+export function FilaTelefono({
+  fila,
+  onGuardar,
+}: {
+  fila: Pick<FilaAnalizada, "numero_reclamo" | "advertencias"> & { data: { solicitante: string | null; telefono_original: string | null; submotivo: string | null } | null };
+  onGuardar: (v: string) => void | Promise<void>;
+}) {
+  const original = fila.data?.telefono_original ?? "";
+  const [valor, setValor] = useState(original);
+  const sugerido = sugerirTelefono(original);
+  const ok = normalizarTelefono(valor).valido;
+  return (
+    <form
+      className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onGuardar(valor);
+      }}
+    >
+      <div className="w-44 min-w-0">
+        <div className="truncate font-medium">{fila.data?.solicitante ?? "—"}</div>
+        <div className="truncate font-mono text-xs text-slate-500">
+          {fila.numero_reclamo} · {fila.data?.submotivo ?? ""}
+        </div>
+      </div>
+      <div className="w-36 text-xs">
+        <div className="text-slate-400">Cargado</div>
+        <div className="font-medium text-rose-600">{original || "(vacío)"}</div>
+      </div>
+      <input
+        className={`input w-44 py-1.5 ${valor && ok ? "border-emerald-400" : ""}`}
+        placeholder="Ej: 11 3455-4433"
+        value={valor}
+        onChange={(e) => setValor(e.target.value)}
+      />
+      {sugerido && valor === original && (
+        <button type="button" className="btn-ghost py-1 text-xs text-brand-700" onClick={() => setValor(sugerido)} title="Sugerencia automática">
+          <Wand2 size={13} /> ¿{telefonoLindo(normalizarTelefono(sugerido).normalizado)}?
+        </button>
+      )}
+      <span className="text-xs">{valor && valor !== original ? (ok ? <span className="text-emerald-600">✓ válido</span> : <span className="text-rose-600">sigue inválido</span>) : null}</span>
+      <button className="btn-primary ml-auto py-1 text-xs" disabled={!valor.trim() || valor === original || !ok}>
+        Guardar
+      </button>
+    </form>
   );
 }

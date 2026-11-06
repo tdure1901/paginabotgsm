@@ -1,135 +1,130 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { cargarDatos, leerVistos, marcarVisto, suscribirCambios, type Datos } from "./api";
-import type { MensajeChat, Notificacion } from "./types";
-import { categoria } from "./format";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { leerVistos, marcarVisto } from "./api";
+import {
+  cargarConversaciones,
+  cargarExclusiones,
+  cargarMonitoreo,
+  cargarTelefonosInvalidos,
+  suscribirCambios,
+  type Periodo,
+} from "./consultas";
+import type { Conversacion, Exclusion, Notificacion, Reclamo } from "./types";
 
-export interface EventoChat {
-  id: string;
-  fecha: string;
-  direccion: "saliente" | "entrante";
-  origen: "bot" | "operador" | "vecino";
-  contenido: string;
-  tipo: "notificacion" | "respuesta" | "mensaje" | "plantilla";
-  enviadoPor?: string;
-}
-
-/** Margen para considerar que un mensaje real y una notificación son el mismo evento */
-const VENTANA_DEDUP = 15 * 60 * 1000;
-
-interface Ctx extends Datos {
+interface Ctx {
+  /* Monitoreo (solo el período elegido, columnas livianas) */
+  periodo: Periodo;
+  setPeriodo: (p: Periodo) => void;
+  reclamos: Reclamo[];
+  notificaciones: Notificacion[];
+  ultimaNotif: Map<string, Notificacion>;
+  /* Lista de no elegibles */
+  exclusiones: Exclusion[];
+  exclusionesDisponible: boolean;
+  /* Reclamos con teléfono para corregir */
+  telInvalidos: Reclamo[];
+  /* Los 100 chats más recientes (para los contadores del menú) */
+  recientes: Conversacion[];
+  conversacionesDisponible: boolean;
+  /** Cambia cada vez que llega un mensaje o una respuesta: las pantallas de chat lo usan para refrescarse */
+  versionChat: number;
+  noLeido: (c: Pick<Conversacion, "reclamo_id" | "ultima_entrada">) => boolean;
+  verConversacion: (reclamoId: string) => void;
+  /** Vuelve a traer la lista de chats (por ejemplo después de enviar un mensaje) */
+  refrescarChats: () => void;
   cargando: boolean;
   error: string | null;
   actualizado: string | null;
   recargar: () => Promise<void>;
-  /** Última notificación de WhatsApp de cada reclamo */
-  ultimaNotif: Map<string, Notificacion>;
-  /** Línea de tiempo de chat por reclamo */
-  hilos: Map<string, EventoChat[]>;
-  noLeidos: (reclamoId: string) => number;
-  ultimaEntrada: (reclamoId: string) => string | null;
-  verConversacion: (reclamoId: string) => void;
 }
 
 const DatosCtx = createContext<Ctx | null>(null);
+const LS_PERIODO = "reclamos-bot-periodo";
+
+function leerPeriodo(): Periodo {
+  try {
+    return (localStorage.getItem(LS_PERIODO) as Periodo) || "3m";
+  } catch {
+    return "3m";
+  }
+}
 
 export function DatosProvider({ children }: { children: ReactNode }) {
-  const [datos, setDatos] = useState<Datos>({ reclamos: [], notificaciones: [], mensajes: [], chatDisponible: true });
+  const [periodo, setPeriodoState] = useState<Periodo>(leerPeriodo);
+  const [mon, setMon] = useState<{ reclamos: Reclamo[]; notificaciones: Notificacion[] }>({ reclamos: [], notificaciones: [] });
+  const [excl, setExcl] = useState<{ exclusiones: Exclusion[]; disponible: boolean }>({ exclusiones: [], disponible: true });
+  const [telInvalidos, setTelInvalidos] = useState<Reclamo[]>([]);
+  const [conv, setConv] = useState<{ lista: Conversacion[]; disponible: boolean }>({ lista: [], disponible: true });
+  const [versionChat, setVersionChat] = useState(0);
+  const [vistos, setVistos] = useState(leerVistos);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actualizado, setActualizado] = useState<string | null>(null);
-  const [vistos, setVistos] = useState(leerVistos);
+  const periodoRef = useRef(periodo);
+  periodoRef.current = periodo;
 
-  const recargar = useCallback(async () => {
-    setCargando(true);
+  const proteger = useCallback(async (fn: () => Promise<void>) => {
     try {
-      setDatos(await cargarDatos());
+      await fn();
       setError(null);
       setActualizado(new Date().toISOString());
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setCargando(false);
     }
   }, []);
 
+  const recargarMonitoreo = useCallback(() => proteger(async () => setMon(await cargarMonitoreo(periodoRef.current))), [proteger]);
+  const recargarExcl = useCallback(() => proteger(async () => setExcl(await cargarExclusiones())), [proteger]);
+  const recargarTel = useCallback(() => proteger(async () => setTelInvalidos(await cargarTelefonosInvalidos())), [proteger]);
+  const recargarConv = useCallback(() => proteger(async () => setConv(await cargarConversaciones())), [proteger]);
+
+  const recargar = useCallback(async () => {
+    setCargando(true);
+    await Promise.all([recargarMonitoreo(), recargarExcl(), recargarTel(), recargarConv()]);
+    setVersionChat((v) => v + 1);
+    setCargando(false);
+  }, [recargarMonitoreo, recargarExcl, recargarTel, recargarConv]);
+
   useEffect(() => {
     recargar();
-    return suscribirCambios(recargar);
-  }, [recargar]);
+    return suscribirCambios((tablas) => {
+      const chat = tablas.has("whatsapp_mensajes") || tablas.has("whatsapp_notificaciones");
+      if (tablas.has("reclamos") || tablas.has("whatsapp_notificaciones")) recargarMonitoreo();
+      if (tablas.has("reclamos") || tablas.has("whatsapp_notificaciones")) recargarTel();
+      if (tablas.has("whatsapp_exclusiones")) recargarExcl();
+      if (chat) {
+        recargarConv();
+        setVersionChat((v) => v + 1);
+      }
+    });
+  }, [recargar, recargarMonitoreo, recargarTel, recargarExcl, recargarConv]);
+
+  const setPeriodo = useCallback(
+    (p: Periodo) => {
+      try {
+        localStorage.setItem(LS_PERIODO, p);
+      } catch {
+        /* ignorar */
+      }
+      periodoRef.current = p;
+      setPeriodoState(p);
+      setCargando(true);
+      recargarMonitoreo().finally(() => setCargando(false));
+    },
+    [recargarMonitoreo],
+  );
 
   const ultimaNotif = useMemo(() => {
     const m = new Map<string, Notificacion>();
-    for (const n of datos.notificaciones) {
+    for (const n of mon.notificaciones) {
       const prev = m.get(n.reclamo_id);
       if (!prev || n.created_at >= prev.created_at) m.set(n.reclamo_id, n);
     }
     return m;
-  }, [datos.notificaciones]);
+  }, [mon.notificaciones]);
 
-  const hilos = useMemo(() => {
-    const m = new Map<string, EventoChat[]>();
-    const push = (id: string, e: EventoChat) => {
-      if (!m.has(id)) m.set(id, []);
-      m.get(id)!.push(e);
-    };
-    // 1) Mensajes reales guardados por n8n / el panel
-    const reales = new Map<string, MensajeChat[]>();
-    for (const x of datos.mensajes) {
-      if (!reales.has(x.reclamo_id)) reales.set(x.reclamo_id, []);
-      reales.get(x.reclamo_id)!.push(x);
-      push(x.reclamo_id, {
-        id: `m-${x.id}`,
-        fecha: x.created_at,
-        direccion: x.direccion,
-        origen: x.origen,
-        contenido: x.contenido,
-        tipo: x.tipo === "plantilla" ? "plantilla" : "mensaje",
-        enviadoPor: x.enviado_por ?? undefined,
-      });
-    }
-    // 2) Notificaciones viejas (anteriores a whatsapp_mensajes): se agregan solo si no hay un mensaje real equivalente
-    const hayCerca = (id: string, fecha: string, pred: (x: MensajeChat) => boolean) =>
-      (reales.get(id) ?? []).some((x) => pred(x) && Math.abs(new Date(x.created_at).getTime() - new Date(fecha).getTime()) < VENTANA_DEDUP);
-    for (const n of datos.notificaciones) {
-      const fEnvio = n.notificado_at ?? n.created_at;
-      const cat = categoria(n);
-      if (!hayCerca(n.reclamo_id, fEnvio, (x) => x.direccion === "saliente" && x.origen === "bot")) {
-        push(n.reclamo_id, {
-          id: `n-${n.id}`,
-          fecha: fEnvio,
-          direccion: "saliente",
-          origen: "bot",
-          contenido: cat === "error" ? "⚠️ No se pudo enviar la notificación de WhatsApp." : "Notificación de WhatsApp enviada consultando si el reclamo fue resuelto.",
-          tipo: "notificacion",
-        });
-      }
-      if (n.respuesta_usuario?.trim()) {
-        const fResp = n.respondido_at ?? n.updated_at ?? n.created_at;
-        if (!hayCerca(n.reclamo_id, fResp, (x) => x.direccion === "entrante")) {
-          push(n.reclamo_id, { id: `r-${n.id}`, fecha: fResp, direccion: "entrante", origen: "vecino", contenido: n.respuesta_usuario.trim(), tipo: "respuesta" });
-        }
-      }
-    }
-    for (const arr of m.values()) arr.sort((a, b) => a.fecha.localeCompare(b.fecha));
-    return m;
-  }, [datos.notificaciones, datos.mensajes]);
-
-  /** Fecha del último mensaje del vecino (abre la ventana de 24 hs de WhatsApp) */
-  const ultimaEntrada = useCallback(
-    (id: string) => {
-      const h = hilos.get(id) ?? [];
-      for (let i = h.length - 1; i >= 0; i--) if (h[i].direccion === "entrante") return h[i].fecha;
-      return null;
-    },
-    [hilos],
-  );
-
-  const noLeidos = useCallback(
-    (id: string) => {
-      const visto = vistos[id] ?? "";
-      return (hilos.get(id) ?? []).filter((e) => e.direccion === "entrante" && e.fecha > visto).length;
-    },
-    [hilos, vistos],
+  const noLeido = useCallback(
+    (c: Pick<Conversacion, "reclamo_id" | "ultima_entrada">) => !!c.ultima_entrada && c.ultima_entrada > (vistos[c.reclamo_id] ?? ""),
+    [vistos],
   );
 
   const verConversacion = useCallback((id: string) => {
@@ -138,7 +133,31 @@ export function DatosProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <DatosCtx.Provider value={{ ...datos, cargando, error, actualizado, recargar, ultimaNotif, hilos, noLeidos, ultimaEntrada, verConversacion }}>
+    <DatosCtx.Provider
+      value={{
+        periodo,
+        setPeriodo,
+        reclamos: mon.reclamos,
+        notificaciones: mon.notificaciones,
+        ultimaNotif,
+        exclusiones: excl.exclusiones,
+        exclusionesDisponible: excl.disponible,
+        telInvalidos,
+        recientes: conv.lista,
+        conversacionesDisponible: conv.disponible,
+        versionChat,
+        noLeido,
+        verConversacion,
+        refrescarChats: () => {
+          recargarConv();
+          setVersionChat((v) => v + 1);
+        },
+        cargando,
+        error,
+        actualizado,
+        recargar,
+      }}
+    >
       {children}
     </DatosCtx.Provider>
   );
