@@ -390,14 +390,33 @@ Sin `.env` arranca en **modo demo** con datos de ejemplo guardados en el navegad
 
 > 🚫 **Nunca** pongas en el panel la `service_role` key de Supabase ni el token de WhatsApp. Todo lo que empieza con `VITE_` queda visible para cualquiera que abra la página.
 
-### Publicar (Cloudflare Pages)
+### Publicar (Cloudflare Workers)
 
-El panel está publicado en **Cloudflare Pages**, conectado al repo de GitHub: **cada merge a `main` se publica solo**.
+El panel está publicado en **Cloudflare** como Worker **`reclamosbotgsm`**, conectado al repo de GitHub: **cada merge a `main` se publica solo** (lo ves en Workers & Pages → reclamosbotgsm → **Deployments**).
 
-Configuración del proyecto (por si hay que crearlo de nuevo: Workers & Pages → Create → Pages → Connect to Git):
+La configuración está en el archivo **`wrangler.jsonc`** del repo:
+- `name`: tiene que ser **exactamente** el nombre del Worker en Cloudflare. Si se renombra el Worker, hay que cambiarlo acá también.
+- `assets.directory`: `./dist`, la carpeta que genera `npm run build`.
+- `not_found_handling`: hace que cualquier ruta (`/monitoreo`, `/conversaciones/…`) devuelva el panel.
+- `previews`: necesario para las URLs de prueba de las ramas.
+
+Configuración en Cloudflare (Settings → Build):
 
 | Campo | Valor |
 |---|---|
+| Production branch | `main` |
+| Build command | `npm run build` |
+| Deploy command | `npx wrangler deploy` |
+| Non-production branch deploy command | `npx wrangler preview` (o `npx wrangler versions upload`) |
+| Variables de build | `NODE_VERSION` = `22`, y las tres `VITE_…` |
+
+- Las `VITE_…` se usan **al compilar**: después de cambiarlas hay que volver a publicar (Deployments → *Retry*).
+- Cada PR genera una URL de prueba. Pide login igual, pero no compartas esas URLs.
+- En n8n, el nodo **Panel** del workflow *Mensajes del panel* tiene que tener en *Allowed Origins* la URL del panel.
+
+Si algún día se usa otro hosting: `npm run build` genera la carpeta `dist/`, y hay que configurar que todas las rutas devuelvan `index.html`. En Vercel ya está resuelto con el `vercel.json` del repo.
+
+---|---|
 | Production branch | `main` |
 | Build command | `npm run build` |
 | Build output directory | `dist` |
@@ -473,7 +492,8 @@ Si algún día se usa otro hosting: `npm run build` genera la carpeta `dist/`. H
 | Conversaciones dice "Falta crear la vista de conversaciones" | No se ejecutó el SQL | Ejecutar `supabase/conversaciones.sql`. |
 | La pantalla dice "Falta crear la tabla…" | No se ejecutó el SQL | Ejecutar `supabase/chat.sql` o `supabase/exclusiones.sql`. |
 | El deploy de Cloudflare falla al compilar | Versión de Node vieja | Variable `NODE_VERSION` = `22`. |
-| Al recargar una página del panel da 404 | Falta la regla de rutas del hosting | Ver [Publicar](#publicar-cloudflare-pages). |
+| Cloudflare: "Missing entry-point" o "missing a `previews` block" | Falta o está mal `wrangler.jsonc` | Verificar que exista en el repo y que `name` sea el del Worker. |
+| Al recargar una página del panel da 404 | Falta la regla de rutas del hosting | Ver [Publicar](#publicar-cloudflare-workers). |
 
 Para cualquier error de n8n: **Executions** → abrir la ejecución en rojo → el nodo que falló muestra el detalle.
 
