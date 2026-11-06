@@ -392,7 +392,7 @@ npm run build
 
 Genera la carpeta `dist/`, que se puede subir a cualquier hosting estático (Vercel, Netlify, Cloudflare Pages…). En el hosting:
 - cargá las tres variables `VITE_…`;
-- configurá que todas las rutas devuelvan `index.html` (en Netlify, un archivo `public/_redirects` con `/* /index.html 200`; en Vercel lo hace solo con el preset de Vite). Si no, al recargar `/monitoreo` da error 404.
+- configurá que todas las rutas devuelvan `index.html`. Si no, al recargar `/monitoreo` da error 404. En **Vercel** ya está resuelto con el archivo `vercel.json` del repo. En Netlify hace falta un archivo `public/_redirects` con `/* /index.html 200`.
 
 ---
 
