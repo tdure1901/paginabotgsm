@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { cargarDatos, leerVistos, marcarVisto, suscribirCambios, type Datos } from "./api";
-import type { Notificacion } from "./types";
+import type { MensajeChat, Notificacion } from "./types";
+import { categoria } from "./format";
 
 export interface EventoChat {
   id: string;
@@ -8,8 +9,12 @@ export interface EventoChat {
   direccion: "saliente" | "entrante";
   origen: "bot" | "operador" | "vecino";
   contenido: string;
-  tipo: "notificacion" | "respuesta" | "mensaje";
+  tipo: "notificacion" | "respuesta" | "mensaje" | "plantilla";
+  enviadoPor?: string;
 }
+
+/** Margen para considerar que un mensaje real y una notificación son el mismo evento */
+const VENTANA_DEDUP = 15 * 60 * 1000;
 
 interface Ctx extends Datos {
   cargando: boolean;
@@ -21,6 +26,7 @@ interface Ctx extends Datos {
   /** Línea de tiempo de chat por reclamo */
   hilos: Map<string, EventoChat[]>;
   noLeidos: (reclamoId: string) => number;
+  ultimaEntrada: (reclamoId: string) => string | null;
   verConversacion: (reclamoId: string) => void;
 }
 
@@ -66,32 +72,57 @@ export function DatosProvider({ children }: { children: ReactNode }) {
       if (!m.has(id)) m.set(id, []);
       m.get(id)!.push(e);
     };
-    for (const n of datos.notificaciones) {
-      push(n.reclamo_id, {
-        id: `n-${n.id}`,
-        fecha: n.created_at,
-        direccion: "saliente",
-        origen: "bot",
-        contenido: "Notificación de WhatsApp enviada consultando si el reclamo fue resuelto.",
-        tipo: "notificacion",
+    // 1) Mensajes reales guardados por n8n / el panel
+    const reales = new Map<string, MensajeChat[]>();
+    for (const x of datos.mensajes) {
+      if (!reales.has(x.reclamo_id)) reales.set(x.reclamo_id, []);
+      reales.get(x.reclamo_id)!.push(x);
+      push(x.reclamo_id, {
+        id: `m-${x.id}`,
+        fecha: x.created_at,
+        direccion: x.direccion,
+        origen: x.origen,
+        contenido: x.contenido,
+        tipo: x.tipo === "plantilla" ? "plantilla" : "mensaje",
+        enviadoPor: x.enviado_por ?? undefined,
       });
-      if (n.respuesta_usuario?.trim()) {
+    }
+    // 2) Notificaciones viejas (anteriores a whatsapp_mensajes): se agregan solo si no hay un mensaje real equivalente
+    const hayCerca = (id: string, fecha: string, pred: (x: MensajeChat) => boolean) =>
+      (reales.get(id) ?? []).some((x) => pred(x) && Math.abs(new Date(x.created_at).getTime() - new Date(fecha).getTime()) < VENTANA_DEDUP);
+    for (const n of datos.notificaciones) {
+      const fEnvio = n.notificado_at ?? n.created_at;
+      const cat = categoria(n);
+      if (!hayCerca(n.reclamo_id, fEnvio, (x) => x.direccion === "saliente" && x.origen === "bot")) {
         push(n.reclamo_id, {
-          id: `r-${n.id}`,
-          fecha: n.updated_at ?? n.created_at,
-          direccion: "entrante",
-          origen: "vecino",
-          contenido: n.respuesta_usuario.trim(),
-          tipo: "respuesta",
+          id: `n-${n.id}`,
+          fecha: fEnvio,
+          direccion: "saliente",
+          origen: "bot",
+          contenido: cat === "error" ? "⚠️ No se pudo enviar la notificación de WhatsApp." : "Notificación de WhatsApp enviada consultando si el reclamo fue resuelto.",
+          tipo: "notificacion",
         });
       }
-    }
-    for (const x of datos.mensajes) {
-      push(x.reclamo_id, { id: `m-${x.id}`, fecha: x.created_at, direccion: x.direccion, origen: x.origen, contenido: x.contenido, tipo: "mensaje" });
+      if (n.respuesta_usuario?.trim()) {
+        const fResp = n.respondido_at ?? n.updated_at ?? n.created_at;
+        if (!hayCerca(n.reclamo_id, fResp, (x) => x.direccion === "entrante")) {
+          push(n.reclamo_id, { id: `r-${n.id}`, fecha: fResp, direccion: "entrante", origen: "vecino", contenido: n.respuesta_usuario.trim(), tipo: "respuesta" });
+        }
+      }
     }
     for (const arr of m.values()) arr.sort((a, b) => a.fecha.localeCompare(b.fecha));
     return m;
   }, [datos.notificaciones, datos.mensajes]);
+
+  /** Fecha del último mensaje del vecino (abre la ventana de 24 hs de WhatsApp) */
+  const ultimaEntrada = useCallback(
+    (id: string) => {
+      const h = hilos.get(id) ?? [];
+      for (let i = h.length - 1; i >= 0; i--) if (h[i].direccion === "entrante") return h[i].fecha;
+      return null;
+    },
+    [hilos],
+  );
 
   const noLeidos = useCallback(
     (id: string) => {
@@ -107,7 +138,7 @@ export function DatosProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <DatosCtx.Provider value={{ ...datos, cargando, error, actualizado, recargar, ultimaNotif, hilos, noLeidos, verConversacion }}>
+    <DatosCtx.Provider value={{ ...datos, cargando, error, actualizado, recargar, ultimaNotif, hilos, noLeidos, ultimaEntrada, verConversacion }}>
       {children}
     </DatosCtx.Provider>
   );

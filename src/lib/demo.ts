@@ -56,28 +56,38 @@ export function generarDemo(): { reclamos: Reclamo[]; notificaciones: Notificaci
     reclamos.push(r);
     if (!elegible || i > 22) return;
 
-    const enviado = new Date(now - (5 - (i % 5)) * 864e5 - (i % 6) * 36e5);
-    const tipo = i % 4 === 0 ? "no" : i % 5 === 1 ? "pendiente" : i % 7 === 3 ? "sin" : "si";
-    const resp = tipo === "si" ? pick(["Si", "SI", "si", "1"], i) : tipo === "no" ? pick(["No", "NO", "2"], i) : null;
-    const respondido = new Date(enviado.getTime() + (1 + (i % 4)) * 36e5);
+    // El más reciente respondió hace un par de horas (chat abierto); el resto, días atrás
+    const enviado = i === 22 ? new Date(now - 5 * 36e5) : new Date(now - (5 - (i % 5)) * 864e5 - (i % 6) * 36e5);
+    const tipo = i === 22 ? "no" : i % 4 === 0 ? "no" : i % 5 === 1 ? "pendiente" : i % 7 === 3 ? "sin" : "si";
+    const resp = tipo === "si" ? pick(["si", "Si", "sí"], i) : tipo === "no" ? pick(["no", "No"], i) : null;
+    const respondido = i === 22 ? new Date(now - 3 * 36e5) : new Date(enviado.getTime() + (1 + (i % 4)) * 36e5);
     notificaciones.push({
       id: crypto.randomUUID(),
       created_at: enviado.toISOString(),
       updated_at: resp ? respondido.toISOString() : enviado.toISOString(),
+      notificado_at: enviado.toISOString(),
+      respondido_at: resp ? respondido.toISOString() : null,
       reclamo_id: r.id,
-      estado: tipo === "si" ? "respondido si" : tipo === "no" ? "respondido no" : tipo === "sin" ? "sin respuesta" : "enviado",
-      respuesta_usuario: resp,
+      estado: tipo === "si" ? "respondido_si" : tipo === "no" ? "respondido_no" : tipo === "sin" ? "sin respuesta" : "enviado",
+      respuesta_usuario: resp ? (resp.toLowerCase().startsWith("s") ? "si" : "no") : null,
     });
-    if (tipo === "no" && i % 8 === 0) {
-      mensajes.push({
-        id: crypto.randomUUID(),
-        created_at: new Date(respondido.getTime() + 6e4).toISOString(),
-        reclamo_id: r.id,
-        direccion: "entrante",
-        origen: "vecino",
-        contenido: "Sigue igual, nadie vino a arreglarlo",
-      });
-    }
+
+    // Los reclamos "nuevos" ya tienen la conversación completa en whatsapp_mensajes (como la guarda n8n)
+    if (i % 3 !== 0 && i !== 22) return;
+    const msg = (fecha: Date, direccion: "saliente" | "entrante", origen: "bot" | "vecino" | "operador", contenido: string, extra: Partial<MensajeChat> = {}) =>
+      mensajes.push({ id: crypto.randomUUID(), created_at: fecha.toISOString(), reclamo_id: r.id, direccion, origen, contenido, ...extra });
+    msg(enviado, "saliente", "bot", `Hola ${nombre}, te escribimos por tu reclamo N° ${r.numero_reclamo} (${motivo}) en ${r.calle} ${r.numero_domicilio}. ¿Se resolvió el problema?`, { tipo: "plantilla" });
+    if (!resp) return;
+    msg(respondido, "entrante", "vecino", resp);
+    msg(
+      new Date(respondido.getTime() + 2e3),
+      "saliente",
+      "bot",
+      tipo === "si"
+        ? "¡Qué bueno que el problema se haya solucionado! 🙌 Gracias por confirmarlo."
+        : "Lamentamos que tu problema continúe. Vamos a reabrir el reclamo y nos pondremos en contacto con vos.",
+    );
+    if (tipo === "no") msg(new Date(respondido.getTime() + 5 * 6e4), "entrante", "vecino", "Sigue igual, nadie vino a arreglarlo");
   });
 
   return { reclamos, notificaciones, mensajes };

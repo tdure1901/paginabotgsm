@@ -1,18 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Bot, Info, Loader2, MapPin, Phone, Search, SendHorizontal, UserRound, Zap } from "lucide-react";
+import { ArrowLeft, Bot, FileText, MapPin, Phone, Search, SendHorizontal, UserRound } from "lucide-react";
 import { Avatar, EstadoBadge, Vacio } from "../components/ui";
 import { useDatos } from "../lib/useDatos";
 import { ESTADOS, estadoReclamo, fechaHora, hora, nombreLindo, telefonoLindo, v, type EstadoVisible } from "../lib/format";
-import { CHAT_MANUAL_HABILITADO, enviarMensaje } from "../lib/api";
-
-const RESPUESTAS_RAPIDAS = [
-  "Hola! Te escribimos de la Municipalidad para hacer seguimiento de tu reclamo.",
-  "Gracias por avisarnos. Ya derivamos tu caso al área correspondiente.",
-  "Una cuadrilla va a pasar en los próximos días.",
-  "¿Nos podrías mandar una foto del problema?",
-  "¡Gracias por tu respuesta! Que tengas un buen día.",
-];
+import { CHAT_MANUAL_HABILITADO } from "../lib/api";
+import Composer from "../components/Composer";
 
 type Filtro = "todas" | "no_leidas" | EstadoVisible;
 const FILTROS: { k: Filtro; label: string }[] = [
@@ -34,13 +27,9 @@ function diaSeparador(iso: string) {
 export default function ConversacionesPage() {
   const { reclamoId } = useParams();
   const navigate = useNavigate();
-  const { reclamos, hilos, ultimaNotif, noLeidos, verConversacion, recargar, chatDisponible } = useDatos();
+  const { reclamos, hilos, ultimaNotif, noLeidos, ultimaEntrada, verConversacion, recargar, chatDisponible } = useDatos();
   const [q, setQ] = useState("");
   const [filtro, setFiltro] = useState<Filtro>("todas");
-  const [texto, setTexto] = useState("");
-  const [enviando, setEnviando] = useState(false);
-  const [error, setError] = useState("");
-  const [rapidas, setRapidas] = useState(false);
   const finRef = useRef<HTMLDivElement>(null);
 
   const conversaciones = useMemo(
@@ -75,24 +64,6 @@ export default function ConversacionesPage() {
   useEffect(() => {
     if (activo && noLeidos(activo.id) > 0) verConversacion(activo.id);
   }, [activo, noLeidos, verConversacion]);
-
-  async function enviar() {
-    if (!activo || !texto.trim()) return;
-    setEnviando(true);
-    setError("");
-    try {
-      await enviarMensaje(activo, texto.trim());
-      setTexto("");
-      await recargar();
-      verConversacion(activo.id);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setEnviando(false);
-    }
-  }
-
-  const puedeEscribir = CHAT_MANUAL_HABILITADO && chatDisponible && !!activo?.telefono_valido;
 
   return (
     <div className="flex h-[calc(100vh-108px)] md:h-screen">
@@ -182,7 +153,12 @@ export default function ConversacionesPage() {
                       {sale && (
                         <div className={`mb-0.5 flex items-center gap-1 text-[10px] font-semibold not-italic uppercase ${op ? "text-brand-100" : "text-brand-700"}`}>
                           {op ? <UserRound size={11} /> : <Bot size={11} />}
-                          {op ? "Operador" : "Bot"}
+                          {op ? m.enviadoPor ?? "Operador" : "Bot"}
+                          {m.tipo === "plantilla" && (
+                            <span className="ml-1 inline-flex items-center gap-0.5 rounded bg-black/10 px-1 normal-case">
+                              <FileText size={10} /> plantilla
+                            </span>
+                          )}
                         </div>
                       )}
                       <div className="whitespace-pre-wrap">{m.contenido}</div>
@@ -196,59 +172,23 @@ export default function ConversacionesPage() {
             <div ref={finRef} />
           </div>
 
-          <footer className="border-t border-slate-200 bg-white p-3">
-            {!puedeEscribir ? (
-              <div className="flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
-                <Info size={15} className="mt-0.5 shrink-0 text-slate-400" />
-                {!activo.telefono_valido
-                  ? "Este reclamo no tiene un teléfono válido para WhatsApp."
-                  : !chatDisponible
-                    ? "Para escribir desde el panel falta crear la tabla whatsapp_mensajes en Supabase (ver supabase/chat.sql)."
-                    : "Para escribir desde el panel falta configurar el webhook de n8n (VITE_N8N_WEBHOOK_MENSAJE)."}
-              </div>
-            ) : (
-              <>
-                {error && <div className="mb-2 text-xs text-rose-600">No se pudo enviar: {error}</div>}
-                {rapidas && (
-                  <div className="mb-2 flex flex-wrap gap-1.5">
-                    {RESPUESTAS_RAPIDAS.map((t) => (
-                      <button
-                        key={t}
-                        onClick={() => {
-                          setTexto(t);
-                          setRapidas(false);
-                        }}
-                        className="rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:border-brand-500 hover:text-brand-700"
-                      >
-                        {t.length > 48 ? t.slice(0, 48) + "…" : t}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <div className="flex items-end gap-2">
-                  <button className={`btn-ghost h-10 px-2.5 ${rapidas ? "text-brand-700" : ""}`} onClick={() => setRapidas(!rapidas)} title="Respuestas rápidas">
-                    <Zap size={18} />
-                  </button>
-                  <textarea
-                    rows={1}
-                    className="input max-h-32 min-h-10 resize-none"
-                    placeholder="Escribí un mensaje…"
-                    value={texto}
-                    onChange={(e) => setTexto(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        enviar();
-                      }
-                    }}
-                  />
-                  <button className="btn-primary h-10 px-3" disabled={!texto.trim() || enviando} onClick={enviar}>
-                    {enviando ? <Loader2 size={18} className="animate-spin" /> : <SendHorizontal size={18} />}
-                  </button>
-                </div>
-              </>
-            )}
-          </footer>
+          <Composer
+            reclamo={activo}
+            ultimaEntrada={ultimaEntrada(activo.id)}
+            bloqueo={
+              !activo.telefono_valido
+                ? "Este reclamo no tiene un teléfono válido para WhatsApp."
+                : !chatDisponible
+                  ? "Para escribir desde el panel falta crear la tabla whatsapp_mensajes en Supabase (ver supabase/chat.sql)."
+                  : !CHAT_MANUAL_HABILITADO
+                    ? "Para escribir desde el panel falta configurar el webhook de n8n (VITE_N8N_WEBHOOK_MENSAJE)."
+                    : null
+            }
+            onEnviado={async () => {
+              await recargar();
+              verConversacion(activo.id);
+            }}
+          />
         </section>
       ) : (
         <section className="hidden flex-1 place-items-center bg-slate-100 md:grid">

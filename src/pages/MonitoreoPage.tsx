@@ -72,7 +72,7 @@ export default function MonitoreoPage() {
     return { c, enviados, respondidos, elegibles: reclamos.filter((r) => r.whatsapp_eligible).length };
   }, [todas, reclamos]);
 
-  const dona = (["si", "no", "respondido_otro", "pendiente", "sin_respuesta", "otro"] as EstadoVisible[])
+  const dona = (["si", "no", "respondido_otro", "pendiente", "sin_respuesta", "error", "otro"] as EstadoVisible[])
     .map((e) => ({ name: ESTADOS[e].label, value: k.c[e], color: ESTADOS[e].color }))
     .filter((d) => d.value > 0);
 

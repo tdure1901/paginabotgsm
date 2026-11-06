@@ -1,0 +1,484 @@
+{
+  "name": "Mensajes del panel",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "panel-mensaje",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -900,
+        300
+      ],
+      "id": "63bb70ee-e281-4181-a8b3-13e76591821f",
+      "name": "Panel",
+      "webhookId": "f8ad14ac-6042-4506-8dea-73c8183b363c",
+      "notes": "URL de producción → VITE_N8N_WEBHOOK_MENSAJE del panel. Podés cambiar allowedOrigins por el dominio del panel.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "url": "https://acafuwhszbdeznqovpwu.supabase.co/auth/v1/user",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "PEGAR_ACA_LA_ANON_KEY_DE_SUPABASE"
+            },
+            {
+              "name": "Authorization",
+              "value": "={{ $json.headers.authorization || '' }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -680,
+        300
+      ],
+      "id": "c50e68b1-0da9-40c5-a5ba-1195d8f37e87",
+      "name": "Verificar usuario",
+      "notes": "Comprueba que quien manda el mensaje esté logueado en el panel. Pegar la anon key (la misma del .env del panel).",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "8a27d9cd-3c60-4d61-ae43-1d8585eb987a",
+              "leftValue": "={{ $json.statusCode }}",
+              "rightValue": 200,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -460,
+        300
+      ],
+      "id": "70fa1c8e-12a2-4302-b74a-6acdefdf2cfa",
+      "name": "¿Logueado?"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: false, error: 'No autorizado. Volvé a iniciar sesión en el panel.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -240,
+        480
+      ],
+      "id": "1c6c8022-a25e-4b51-aad8-a1f7986945d4",
+      "name": "No autorizado"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "tableId": "reclamos",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "keyValue": "={{ $('Panel').item.json.body.reclamo_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        200
+      ],
+      "id": "8e874cde-7360-40ef-a0db-98ec139b47d6",
+      "name": "Buscar reclamo",
+      "credentials": {
+        "supabaseApi": {
+          "id": "UKrsQPrPQ2Mu8WHt",
+          "name": "Supabase account"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "97876030-c0d7-4318-bcdb-30c43f13784c",
+              "leftValue": "={{ $json.telefono_normalizado }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -20,
+        200
+      ],
+      "id": "927e68f6-144f-4cbc-93a0-ded61773e862",
+      "name": "¿Teléfono válido?"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: false, error: 'El reclamo no existe o no tiene un teléfono válido.' } }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        200,
+        380
+      ],
+      "id": "1fb91568-0923-493c-ac78-5f2743103dd6",
+      "name": "Sin teléfono"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Arma el mensaje de WhatsApp (texto libre o plantilla) a partir de lo que mandó el panel\nconst b = $('Panel').first().json.body || {};\nconst r = $('Buscar reclamo').first().json;\nconst usuario = $('Verificar usuario').first().json.body || {};\n\nlet payload, contenido;\nif (b.tipo === 'plantilla') {\n  if (!b.plantilla) throw new Error('Falta el nombre de la plantilla');\n  const params = Array.isArray(b.parametros) ? b.parametros : [];\n  payload = {\n    messaging_product: 'whatsapp',\n    to: r.telefono_normalizado,\n    type: 'template',\n    template: {\n      name: b.plantilla,\n      language: { code: b.idioma || 'es_AR' },\n      components: params.length ? [{ type: 'body', parameters: params.map(t => ({ type: 'text', text: String(t) })) }] : [],\n    },\n  };\n  contenido = b.texto || `[Plantilla ${b.plantilla}]`;\n} else {\n  const m = String(b.mensaje || '').trim();\n  if (!m) throw new Error('El mensaje está vacío');\n  payload = { messaging_product: 'whatsapp', to: r.telefono_normalizado, type: 'text', text: { body: m } };\n  contenido = m;\n}\n\nreturn [{ json: { payload, contenido, tipo: b.tipo === 'plantilla' ? 'plantilla' : 'texto', reclamo_id: r.id, email: usuario.email || null } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        120
+      ],
+      "id": "6e283d49-3795-4870-8494-cc3e7cc78a44",
+      "name": "Armar mensaje"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v26.0/1389342037585439/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.payload }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        420,
+        120
+      ],
+      "id": "ebf82454-5fff-478d-95dc-959bbd7bde69",
+      "name": "Enviar WhatsApp",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REEMPLAZAR",
+          "name": "WhatsApp Cloud API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "6ede1c6e-3319-4698-9d83-0c95fc064f01",
+              "leftValue": "={{ $json.messages?.[0]?.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        640,
+        120
+      ],
+      "id": "10a4faeb-e36c-4ca5-b05a-af964fe778f7",
+      "name": "¿Meta lo aceptó?"
+    },
+    {
+      "parameters": {
+        "tableId": "whatsapp_mensajes",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "reclamo_id",
+              "fieldValue": "={{ $('Armar mensaje').item.json.reclamo_id }}"
+            },
+            {
+              "fieldId": "direccion",
+              "fieldValue": "saliente"
+            },
+            {
+              "fieldId": "origen",
+              "fieldValue": "operador"
+            },
+            {
+              "fieldId": "tipo",
+              "fieldValue": "={{ $('Armar mensaje').item.json.tipo }}"
+            },
+            {
+              "fieldId": "enviado_por",
+              "fieldValue": "={{ $('Armar mensaje').item.json.email }}"
+            },
+            {
+              "fieldId": "wa_message_id",
+              "fieldValue": "={{ $('Enviar WhatsApp').item.json.messages[0].id }}"
+            },
+            {
+              "fieldId": "contenido",
+              "fieldValue": "={{ $('Armar mensaje').item.json.contenido }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        860,
+        20
+      ],
+      "id": "e609e2b6-a0d2-41f0-adb8-53f889586218",
+      "name": "Guardar mensaje",
+      "credentials": {
+        "supabaseApi": {
+          "id": "UKrsQPrPQ2Mu8WHt",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1080,
+        20
+      ],
+      "id": "14778013-50a9-4f53-b7fb-58f02425245d",
+      "name": "OK"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: false, error: ($json.error?.code ? '(' + $json.error.code + ') ' : '') + ($json.error?.error_data?.details || $json.error?.message || 'WhatsApp rechazó el mensaje') } }}",
+        "options": {
+          "responseCode": 502
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        860,
+        240
+      ],
+      "id": "272c52b3-b1e9-4ac2-a9c1-2c26fd29819a",
+      "name": "Error de Meta"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Panel": {
+      "main": [
+        [
+          {
+            "node": "Verificar usuario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar usuario": {
+      "main": [
+        [
+          {
+            "node": "¿Logueado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Logueado?": {
+      "main": [
+        [
+          {
+            "node": "Buscar reclamo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No autorizado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar reclamo": {
+      "main": [
+        [
+          {
+            "node": "¿Teléfono válido?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Teléfono válido?": {
+      "main": [
+        [
+          {
+            "node": "Armar mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sin teléfono",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar mensaje": {
+      "main": [
+        [
+          {
+            "node": "Enviar WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "¿Meta lo aceptó?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Meta lo aceptó?": {
+      "main": [
+        [
+          {
+            "node": "Guardar mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error de Meta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar mensaje": {
+      "main": [
+        [
+          {
+            "node": "OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

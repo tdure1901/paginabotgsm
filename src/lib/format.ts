@@ -24,7 +24,7 @@ export const v = (x: string | null | undefined) => (x == null || x === "" ? "—
 
 /* ---------- Categorías de respuesta (misma lógica que el monitoreo de Lovable) ---------- */
 
-export type Categoria = "pendiente" | "si" | "no" | "sin_respuesta" | "respondido_otro" | "otro";
+export type Categoria = "pendiente" | "si" | "no" | "sin_respuesta" | "respondido_otro" | "error" | "otro";
 
 function tokens(s: string | null) {
   return (s ?? "")
@@ -40,9 +40,10 @@ export function categoria(n: Pick<Notificacion, "estado" | "respuesta_usuario">)
   if (r.length === 1 && (r[0] === "si" || r[0] === "1")) return "si";
   if (r.length === 1 && (r[0] === "no" || r[0] === "2")) return "no";
   const e = tokens(n.estado);
+  if (e.includes("error")) return "error";
   if (e.includes("sin")) return "sin_respuesta";
   if (e.includes("respondido") || e.includes("respondio")) return e.includes("si") ? "si" : e.includes("no") ? "no" : "respondido_otro";
-  if (e.includes("enviado")) return "pendiente";
+  if (e.includes("enviado") || e.includes("enviando")) return "pendiente";
   return "otro";
 }
 
@@ -60,6 +61,7 @@ export const ESTADOS: Record<EstadoVisible, { label: string; corto: string; clas
   pendiente: { label: "Enviado, sin responder aún", corto: "Esperando", clase: "bg-sky-100 text-sky-700", color: "#0284c7" },
   sin_respuesta: { label: "Sin respuesta del vecino", corto: "Sin respuesta", clase: "bg-amber-100 text-amber-700", color: "#d97706" },
   respondido_otro: { label: "Respondió (otro)", corto: "Otra respuesta", clase: "bg-violet-100 text-violet-700", color: "#7c3aed" },
+  error: { label: "Error de envío", corto: "Error", clase: "bg-orange-100 text-orange-700", color: "#ea580c" },
   otro: { label: "Otro estado", corto: "Otro", clase: "bg-slate-100 text-slate-600", color: "#64748b" },
   no_enviado: { label: "Elegible, no enviado", corto: "No enviado", clase: "bg-slate-100 text-slate-600", color: "#94a3b8" },
   no_elegible: { label: "No elegible", corto: "No elegible", clase: "bg-slate-50 text-slate-400", color: "#cbd5e1" },

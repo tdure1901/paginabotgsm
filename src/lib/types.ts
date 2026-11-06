@@ -39,6 +39,9 @@ export interface Notificacion {
   reclamo_id: string;
   estado: string | null;
   respuesta_usuario: string | null;
+  notificado_at?: string | null;
+  respondido_at?: string | null;
+  telefono_destino?: string | null;
 }
 
 /** Fila de `whatsapp_mensajes` (tabla nueva para el chat del CRM) */
@@ -49,4 +52,6 @@ export interface MensajeChat {
   direccion: "saliente" | "entrante";
   origen: "bot" | "operador" | "vecino";
   contenido: string;
+  tipo?: "texto" | "plantilla" | null;
+  enviado_por?: string | null;
 }

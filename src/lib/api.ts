@@ -39,7 +39,7 @@ export async function salir() {
 
 /* ---------------- Modo demo (localStorage) ---------------- */
 
-const LS_KEY = "reclamos-bot-demo-v2";
+const LS_KEY = "reclamos-bot-demo-v3";
 type Demo = Omit<Datos, "chatDisponible">;
 
 function leerDemo(): Demo {
@@ -157,29 +157,50 @@ export async function importarReclamos(validos: ReclamoImport[], progreso?: (hec
 
 /* ---------------- Chat ---------------- */
 
-export async function enviarMensaje(reclamo: Reclamo, contenido: string): Promise<void> {
-  const msg = { reclamo_id: reclamo.id, direccion: "saliente" as const, origen: "operador" as const, contenido };
+export type EnvioChat = { tipo: "texto"; mensaje: string } | { tipo: "plantilla"; plantilla: string; idioma: string; parametros: string[]; texto: string };
+
+/**
+ * Manda un mensaje al vecino a través de n8n. n8n envía el WhatsApp y, si Meta lo acepta,
+ * lo guarda en whatsapp_mensajes (así nunca queda en el chat un mensaje que no salió).
+ */
+export async function enviarMensaje(reclamo: Reclamo, envio: EnvioChat): Promise<void> {
+  const contenido = envio.tipo === "texto" ? envio.mensaje : envio.texto;
   if (!supabase) {
     const d = leerDemo();
-    d.mensajes.push({ ...msg, id: crypto.randomUUID(), created_at: new Date().toISOString() });
+    d.mensajes.push({
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString(),
+      reclamo_id: reclamo.id,
+      direccion: "saliente",
+      origen: "operador",
+      contenido,
+      tipo: envio.tipo,
+      enviado_por: "demo",
+    });
     guardarDemo(d);
     return;
   }
   if (!N8N_MENSAJE) throw new Error("Falta configurar VITE_N8N_WEBHOOK_MENSAJE.");
+  const token = (await supabase.auth.getSession()).data.session?.access_token;
   const res = await fetch(N8N_MENSAJE, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      reclamo_id: reclamo.id,
-      numero_reclamo: reclamo.numero_reclamo,
-      telefono: reclamo.telefono_normalizado,
-      solicitante: reclamo.solicitante,
-      mensaje: contenido,
-    }),
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
+    body: JSON.stringify({ reclamo_id: reclamo.id, ...envio }),
   });
-  if (!res.ok) throw new Error(`n8n respondió ${res.status}`);
-  const { error } = await supabase.from("whatsapp_mensajes").insert(msg);
-  if (error) throw error;
+  let cuerpo: { ok?: boolean; error?: string } = {};
+  try {
+    cuerpo = await res.json();
+  } catch {
+    /* respuesta sin JSON */
+  }
+  if (!res.ok || cuerpo.ok === false) throw new Error(traducirError(cuerpo.error) ?? `n8n respondió ${res.status}`);
+}
+
+function traducirError(e?: string) {
+  if (!e) return undefined;
+  if (/131047|re-engagement|24 hours/i.test(e)) return "Pasaron más de 24 hs desde el último mensaje del vecino: solo se puede enviar una plantilla.";
+  if (/132001|template.*(not exist|does not exist)/i.test(e)) return "La plantilla no existe o no está aprobada en Meta.";
+  return e;
 }
 
 /* ---------------- "Leído" por conversación (se guarda en este navegador) ---------------- */

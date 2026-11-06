@@ -1,0 +1,393 @@
+{
+  "name": "Bot Reclamos",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "daysInterval": 2,
+              "triggerAtHour": 11
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -1696,
+        128
+      ],
+      "id": "e58246c9-ce3b-423d-abd4-e008e83934fa",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "tableId": "reclamos_para_notificar",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "telefono_valido",
+              "keyValue": "TRUE"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1472,
+        128
+      ],
+      "id": "b6fc2a57-c458-401e-ad0b-739ae1f041cd",
+      "name": "Consigue_fila",
+      "credentials": {
+        "supabaseApi": {
+          "id": "UKrsQPrPQ2Mu8WHt",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "whatsapp_notificaciones",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "reclamo_id",
+              "fieldValue": "={{ $json.id }}"
+            },
+            {
+              "fieldId": "estado",
+              "fieldValue": "enviando"
+            },
+            {
+              "fieldId": "telefono_destino",
+              "fieldValue": "={{ $json.telefono_normalizado }}"
+            },
+            {
+              "fieldId": "notification_attempts",
+              "fieldValue": "1"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1248,
+        128
+      ],
+      "id": "0b40d2fa-3ffe-4386-970f-23c023970972",
+      "name": "Crea_fila_notiwpp",
+      "credentials": {
+        "supabaseApi": {
+          "id": "UKrsQPrPQ2Mu8WHt",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v26.0/1389342037585439/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  messaging_product: \"whatsapp\",\n  to: $json.telefono_destino,\n  type: \"template\",\n  template: {\n    name: \"aviso_reclamo\",\n    language: { code: \"es_AR\" },\n    components: [\n      {\n        type: \"body\",\n        parameters: [\n          { type: \"text\", text: $('Consigue_fila').item.json.solicitante },\n          { type: \"text\", text: $('Consigue_fila').item.json.numero_reclamo },\n          { type: \"text\", text: $('Consigue_fila').item.json.motivo || \"Sin especificar\" },\n          { type: \"text\", text: (($('Consigue_fila').item.json.calle || \"\") + \" \" + ($('Consigue_fila').item.json.numero_domicilio || \"\")).trim() || \"Sin especificar\" }\n        ]\n      }\n    ]\n  }\n}\n}}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -1024,
+        128
+      ],
+      "id": "ba7b723c-2d32-4e13-a3f1-8412bd72fa20",
+      "name": "Envia_mensaje",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REEMPLAZAR",
+          "name": "WhatsApp Cloud API"
+        }
+      },
+      "notes": "Corregido: la dirección ahora sale de Consigue_fila (antes siempre quedaba 'Sin especificar')",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f519f192-91ae-4428-9c52-edf9e3d4b89c",
+              "leftValue": "={{ $json.messages?.[0]?.message_status }}",
+              "rightValue": "accepted",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -816,
+        128
+      ],
+      "id": "cc85ba0f-bdfd-4cfc-b1e6-3aa41c588a38",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "whatsapp_notificaciones",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Crea_fila_notiwpp').item.json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "estado",
+              "fieldValue": "enviado"
+            },
+            {
+              "fieldId": "whatsapp_message_id",
+              "fieldValue": "={{ $('Envia_mensaje').item.json.messages[0].id }}"
+            },
+            {
+              "fieldId": "notificado_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            },
+            {
+              "fieldId": "last_notification_error",
+              "fieldValue": "null"
+            },
+            {
+              "fieldId": "updated_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -560,
+        -16
+      ],
+      "id": "823d6860-7f2b-4c5e-8c62-6af458ff77bd",
+      "name": "Actualiza_fila_enviada",
+      "credentials": {
+        "supabaseApi": {
+          "id": "UKrsQPrPQ2Mu8WHt",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "whatsapp_mensajes",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "reclamo_id",
+              "fieldValue": "={{ $('Consigue_fila').item.json.id }}"
+            },
+            {
+              "fieldId": "direccion",
+              "fieldValue": "saliente"
+            },
+            {
+              "fieldId": "origen",
+              "fieldValue": "bot"
+            },
+            {
+              "fieldId": "tipo",
+              "fieldValue": "plantilla"
+            },
+            {
+              "fieldId": "wa_message_id",
+              "fieldValue": "={{ $('Envia_mensaje').item.json.messages[0].id }}"
+            },
+            {
+              "fieldId": "contenido",
+              "fieldValue": "={{ 'Hola ' + $('Consigue_fila').item.json.solicitante + ', te escribimos por tu reclamo N° ' + $('Consigue_fila').item.json.numero_reclamo + ' (' + ($('Consigue_fila').item.json.motivo || 'Sin especificar') + ') en ' + ((($('Consigue_fila').item.json.calle || '') + ' ' + ($('Consigue_fila').item.json.numero_domicilio || '')).trim() || 'Sin especificar') + '. ¿Se resolvió el problema?' }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        -16
+      ],
+      "id": "2433fb75-ad72-45df-b080-df3874aa226f",
+      "name": "Guarda_mensaje_bot",
+      "credentials": {
+        "supabaseApi": {
+          "id": "UKrsQPrPQ2Mu8WHt",
+          "name": "Supabase account"
+        }
+      },
+      "notes": "NUEVO. Ajustar 'contenido' para que sea el texto exacto de la plantilla aviso_reclamo",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "whatsapp_notificaciones",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Crea_fila_notiwpp').item.json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "estado",
+              "fieldValue": "error"
+            },
+            {
+              "fieldId": "notification_attempts",
+              "fieldValue": "={{ $('Crea_fila_notiwpp').item.json.notification_attempts + 1 }}"
+            },
+            {
+              "fieldId": "last_notification_error",
+              "fieldValue": "={{ JSON.stringify($('Envia_mensaje').item.json) }}"
+            },
+            {
+              "fieldId": "updated_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -560,
+        192
+      ],
+      "id": "c8b3bb22-da03-487d-b7b5-70f9dc5d20d3",
+      "name": "Actualiza_error",
+      "credentials": {
+        "supabaseApi": {
+          "id": "UKrsQPrPQ2Mu8WHt",
+          "name": "Supabase account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Consigue_fila",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consigue_fila": {
+      "main": [
+        [
+          {
+            "node": "Crea_fila_notiwpp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crea_fila_notiwpp": {
+      "main": [
+        [
+          {
+            "node": "Envia_mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envia_mensaje": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Actualiza_fila_enviada",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Actualiza_error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Actualiza_fila_enviada": {
+      "main": [
+        [
+          {
+            "node": "Guarda_mensaje_bot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

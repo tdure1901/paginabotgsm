@@ -23,14 +23,27 @@ npm run dev
 
 Sin `.env` arranca en **modo demo** con datos de ejemplo.
 
-## Para habilitar el chat (sección Conversaciones)
+## Chat con el vecino (sección Conversaciones)
 
-Importar y monitorear funcionan con las tablas que ya existen. Para **escribirle al vecino desde el panel** hacen falta dos cosas:
+Toda la conversación se guarda en la tabla nueva `whatsapp_mensajes`, y **la escribe solo n8n**:
 
-1. Ejecutar `supabase/chat.sql` (crea la tabla `whatsapp_mensajes`).
-2. Un webhook en n8n (`VITE_N8N_WEBHOOK_MENSAJE`) que reciba `{ reclamo_id, numero_reclamo, telefono, solicitante, mensaje }` y mande el WhatsApp. El panel guarda el mensaje en `whatsapp_mensajes`.
+| Workflow (`n8n/`) | Qué guarda |
+|---|---|
+| `bot-reclamos.json` | El aviso inicial (plantilla `aviso_reclamo`) como mensaje `bot`. |
+| `respuestas-bot.json` | **Todo** lo que escribe el vecino (`vecino`) y las respuestas automáticas del bot. Clasifica SÍ/NO solo si la notificación está en estado `enviado`; si el vecino ya respondió, el bot no contesta más y el mensaje queda para el operador en el panel. |
+| `mensajes-panel.json` (nuevo) | Mensajes del operador. Verifica que el usuario esté logueado, manda el WhatsApp y **solo si Meta lo acepta** lo guarda (`operador`, con el email de quien lo envió). |
 
-Opcional: para ver en el chat lo que el vecino escribe **después** de su primera respuesta, el flujo de n8n que recibe WhatsApp puede insertar en `whatsapp_mensajes` con `direccion='entrante'`, `origen='vecino'`.
+**Ventana de 24 hs:** WhatsApp solo permite texto libre dentro de las 24 hs desde el último mensaje del vecino. Pasado ese tiempo (o si nunca respondió), el panel solo deja enviar una **plantilla aprobada** para reabrir la conversación. Las plantillas disponibles se configuran en `src/lib/plantillas.ts`; `retomar_conversacion` hay que crearla y aprobarla en Meta.
+
+Los reclamos notificados antes de este cambio se siguen viendo: el panel arma su chat con `whatsapp_notificaciones` y evita duplicados cuando ya existe el mensaje real.
+
+### Pasos para activarlo
+
+1. Ejecutar `supabase/chat.sql` (tabla `whatsapp_mensajes` + vista `ultima_notificacion_por_telefono`).
+2. En n8n crear una credencial **Header Auth** llamada `WhatsApp Cloud API` con nombre `Authorization` y valor `Bearer <token>` (token nuevo de Meta).
+3. Importar los 3 workflows de `n8n/`, elegir las credenciales en los nodos marcados y desactivar los workflows viejos. En `mensajes-panel.json` pegar la anon key en el nodo *Verificar usuario*.
+4. Crear en Meta la plantilla `retomar_conversacion` (categoría *Utilidad*, idioma `es_AR`) con dos variables: `{{1}}` nombre y `{{2}}` nro. de reclamo. El texto tiene que coincidir con el de `src/lib/plantillas.ts`.
+5. Poner la URL de producción del webhook `panel-mensaje` en `VITE_N8N_WEBHOOK_MENSAJE`.
 
 ## Stack
 

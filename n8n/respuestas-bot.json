@@ -1,0 +1,995 @@
+{
+  "name": "Respuestas-bot",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "whatsapp-respuestas",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -448,
+        96
+      ],
+      "id": "a2393e9b-9099-4e47-914b-f2217579f03f",
+      "name": "Webhook1",
+      "webhookId": "3eef35ed-49dc-47e0-8c0b-ba617947fa87"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "9975fa4e-7106-45c2-a690-82f7f4ddbec7",
+              "leftValue": "={{$json.query[\"hub.verify_token\"]}}",
+              "rightValue": "bot-wpp-verificacion-2026",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -224,
+        96
+      ],
+      "id": "b4196a23-8357-43a1-95f2-af54b1c37289",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{$json.query[\"hub.challenge\"]}}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        0,
+        0
+      ],
+      "id": "d1d8f1d6-e315-4b19-bc7a-e19fad74b315",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Invalid verify token",
+        "options": {
+          "responseCode": 403
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        0,
+        160
+      ],
+      "id": "96492e06-0a92-4586-896b-2573d1790650",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-respuestas",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -480,
+        576
+      ],
+      "id": "9977fd1c-0889-4281-8733-99306a32a5d6",
+      "name": "Webhook",
+      "webhookId": "42060fa9-7bf2-48db-845f-f663f9c1762b"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "369c9723-4627-4759-a8c8-96f881d23cac",
+              "leftValue": "={{ $json.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0] !== undefined }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -256,
+        576
+      ],
+      "id": "edc2c3a9-cacb-493f-8e98-61267560518a",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b407859e-7a91-44b4-a1ae-8ce756bda16f",
+              "name": "telefono",
+              "value": "={{ $json.body.entry[0].changes[0].value.messages[0].from }}",
+              "type": "string"
+            },
+            {
+              "id": "dacfb33e-5525-4a8c-ab4b-6893b144b3fa",
+              "name": "message_id",
+              "value": "={{ $json.body.entry[0].changes[0].value.messages[0].id }}",
+              "type": "string"
+            },
+            {
+              "id": "f46c22d1-f7de-4704-9380-0d5ca2d116a7",
+              "name": "tipo",
+              "value": "={{ $json.body.entry[0].changes[0].value.messages[0].type }}",
+              "type": "string"
+            },
+            {
+              "id": "4c85586d-220c-4f39-92cc-0886a0a80498",
+              "name": "texto",
+              "value": "={{ $json.body.entry[0].changes[0].value.messages[0].text?.body || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "eb00b69e-a607-4ab0-9e91-3f891d229bf0",
+              "name": "button_payload",
+              "value": "={{ $json.body.entry[0].changes[0].value.messages[0].button?.payload || $json.body.entry[0].changes[0].value.messages[0].interactive?.button_reply?.id || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "c01ba01a-64d0-494a-b398-fc4a3e91aa3e",
+              "name": "texto_mostrar",
+              "value": "={{ $json.body.entry[0].changes[0].value.messages[0].text?.body || $json.body.entry[0].changes[0].value.messages[0].button?.text || $json.body.entry[0].changes[0].value.messages[0].interactive?.button_reply?.title || ('[' + $json.body.entry[0].changes[0].value.messages[0].type + ']') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -32,
+        576
+      ],
+      "id": "20f291dd-3ce5-4237-9ac5-a8d514204a30",
+      "name": "Normalizar mensaje",
+      "notes": "Se agregó texto_mostrar (lo que se guarda en el chat)",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "ultima_notificacion_por_telefono",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "telefono_destino",
+              "condition": "eq",
+              "keyValue": "={{ $json.telefono }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        176,
+        576
+      ],
+      "id": "ca582de2-8563-419c-8496-c6e17110485a",
+      "name": "Buscar notificación",
+      "credentials": {
+        "supabaseApi": {
+          "id": "UKrsQPrPQ2Mu8WHt",
+          "name": "Supabase account"
+        }
+      },
+      "notes": "Ahora lee la vista ultima_notificacion_por_telefono (siempre la más reciente)",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "tableId": "whatsapp_mensajes",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "reclamo_id",
+              "fieldValue": "={{ $json.reclamo_id }}"
+            },
+            {
+              "fieldId": "direccion",
+              "fieldValue": "entrante"
+            },
+            {
+              "fieldId": "origen",
+              "fieldValue": "vecino"
+            },
+            {
+              "fieldId": "tipo",
+              "fieldValue": "={{ $('Normalizar mensaje').item.json.tipo }}"
+            },
+            {
+              "fieldId": "wa_message_id",
+              "fieldValue": "={{ $('Normalizar mensaje').item.json.message_id }}"
+            },
+            {
+              "fieldId": "contenido",
+              "fieldValue": "={{ $('Normalizar mensaje').item.json.texto_mostrar }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        400,
+        576
+      ],
+      "id": "b8b93439-e3c2-4d9f-b436-c01e269ddf25",
+      "name": "Guardar mensaje vecino",
+      "credentials": {
+        "supabaseApi": {
+          "id": "UKrsQPrPQ2Mu8WHt",
+          "name": "Supabase account"
+        }
+      },
+      "notes": "NUEVO: guarda TODO lo que escribe el vecino. Si Meta reintenta el mismo mensaje, falla por wa_message_id duplicado y no se responde dos veces.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "af8c54a5-f6d6-49c6-8374-75ede2b4dc7e",
+              "leftValue": "={{ $('Buscar notificación').item.json.estado }}",
+              "rightValue": "enviado",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        624,
+        576
+      ],
+      "id": "ee659b3f-cde9-4e77-90f2-77cd149a22da",
+      "name": "¿Esperando respuesta?"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "4e24f431-1bb5-42ac-a754-509b3d1b865d",
+                    "leftValue": "={{ ($('Normalizar mensaje').item.json.button_payload || $('Normalizar mensaje').item.json.texto || '').trim().toLowerCase() }}",
+                    "rightValue": "problema_resuelto",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "SI"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "73deb49a-48d4-4cd5-aa2d-73b59c05c899",
+                    "leftValue": "={{ ($('Normalizar mensaje').item.json.button_payload || $('Normalizar mensaje').item.json.texto || '').trim().toLowerCase() }}",
+                    "rightValue": "si",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "SI_TEXTO"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "6787e936-ec28-4b86-a196-29105910de89",
+                    "leftValue": "={{ ($('Normalizar mensaje').item.json.button_payload || $('Normalizar mensaje').item.json.texto || '').trim().toLowerCase() }}",
+                    "rightValue": "sí",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "SI_TEXTO_ACENTO"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "1f3e2c61-19ee-4714-a8eb-6e7f9f9106ac",
+                    "leftValue": "={{ ($('Normalizar mensaje').item.json.button_payload || $('Normalizar mensaje').item.json.texto || '').trim().toLowerCase() }}",
+                    "rightValue": "problema_no_resuelto",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "No"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "44830c70-300f-485a-a41d-2eca9706bcb7",
+                    "leftValue": "={{ ($('Normalizar mensaje').item.json.button_payload || $('Normalizar mensaje').item.json.texto || '').trim().toLowerCase() }}",
+                    "rightValue": "no",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "NO_TEXTO"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        896,
+        400
+      ],
+      "id": "fa111f92-e60b-4fba-9778-edbe61f79e36",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "whatsapp_notificaciones",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Buscar notificación').item.json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "estado",
+              "fieldValue": "respondido_si"
+            },
+            {
+              "fieldId": "respuesta_usuario",
+              "fieldValue": "si"
+            },
+            {
+              "fieldId": "respondido_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            },
+            {
+              "fieldId": "updated_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        240
+      ],
+      "id": "40d12e83-7dc3-47f1-9cf0-87e723318069",
+      "name": "Update a row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "UKrsQPrPQ2Mu8WHt",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "whatsapp_notificaciones",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Buscar notificación').item.json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "estado",
+              "fieldValue": "respondido_no"
+            },
+            {
+              "fieldId": "respuesta_usuario",
+              "fieldValue": "no"
+            },
+            {
+              "fieldId": "respondido_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            },
+            {
+              "fieldId": "updated_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        420
+      ],
+      "id": "cee62d8f-9588-4f9f-8480-6d317a1941ad",
+      "name": "Update a row1",
+      "credentials": {
+        "supabaseApi": {
+          "id": "UKrsQPrPQ2Mu8WHt",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v26.0/1389342037585439/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { messaging_product: \"whatsapp\", to: $('Normalizar mensaje').item.json.telefono, type: \"text\", text: { body: \"¡Qué bueno que el problema se haya solucionado! 🙌 Gracias por confirmarlo. Desde el Área de Espacio Público de la Municipalidad de General San Martín seguimos trabajando para mejorar nuestra ciudad y dar respuesta a los reclamos de los vecinos.\" } } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1344,
+        240
+      ],
+      "id": "392b28ff-0c37-4db5-a23e-55ecb0359d6e",
+      "name": "HTTP Request1",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REEMPLAZAR",
+          "name": "WhatsApp Cloud API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v26.0/1389342037585439/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { messaging_product: \"whatsapp\", to: $('Normalizar mensaje').item.json.telefono, type: \"text\", text: { body: \"Lamentamos que tu problema continúe. Vamos a reabrir el reclamo y nos pondremos en contacto con vos por otros medios para conocer más detalles y avanzar en una solución. Gracias por avisarnos, tu respuesta nos ayuda a seguir trabajando para mejorar los espacios públicos de San Martín.\" } } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1344,
+        420
+      ],
+      "id": "d36699fc-2e68-4dd9-9b3a-afae1833144b",
+      "name": "HTTP Request2",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REEMPLAZAR",
+          "name": "WhatsApp Cloud API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v26.0/1389342037585439/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { messaging_product: \"whatsapp\", to: $('Normalizar mensaje').item.json.telefono, type: \"text\", text: { body: \"Este número corresponde a un bot automático de avisos. No es un canal de atención por WhatsApp. Para responder sobre el reclamo informado, respondé únicamente Sí o No.\" } } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1344,
+        600
+      ],
+      "id": "b54c6762-33cb-4512-a753-4736b1b167d6",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REEMPLAZAR",
+          "name": "WhatsApp Cloud API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "whatsapp_mensajes",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "reclamo_id",
+              "fieldValue": "={{ $('Buscar notificación').item.json.reclamo_id }}"
+            },
+            {
+              "fieldId": "direccion",
+              "fieldValue": "saliente"
+            },
+            {
+              "fieldId": "origen",
+              "fieldValue": "bot"
+            },
+            {
+              "fieldId": "tipo",
+              "fieldValue": "texto"
+            },
+            {
+              "fieldId": "wa_message_id",
+              "fieldValue": "={{ $('HTTP Request1').item.json.messages?.[0]?.id }}"
+            },
+            {
+              "fieldId": "contenido",
+              "fieldValue": "¡Qué bueno que el problema se haya solucionado! 🙌 Gracias por confirmarlo. Desde el Área de Espacio Público de la Municipalidad de General San Martín seguimos trabajando para mejorar nuestra ciudad y dar respuesta a los reclamos de los vecinos."
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        240
+      ],
+      "id": "41fa7a43-2020-4b05-900b-c29a8498fde1",
+      "name": "Guardar bot SÍ",
+      "credentials": {
+        "supabaseApi": {
+          "id": "UKrsQPrPQ2Mu8WHt",
+          "name": "Supabase account"
+        }
+      },
+      "notes": "NUEVO: guarda la respuesta del bot en el chat",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "tableId": "whatsapp_mensajes",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "reclamo_id",
+              "fieldValue": "={{ $('Buscar notificación').item.json.reclamo_id }}"
+            },
+            {
+              "fieldId": "direccion",
+              "fieldValue": "saliente"
+            },
+            {
+              "fieldId": "origen",
+              "fieldValue": "bot"
+            },
+            {
+              "fieldId": "tipo",
+              "fieldValue": "texto"
+            },
+            {
+              "fieldId": "wa_message_id",
+              "fieldValue": "={{ $('HTTP Request2').item.json.messages?.[0]?.id }}"
+            },
+            {
+              "fieldId": "contenido",
+              "fieldValue": "Lamentamos que tu problema continúe. Vamos a reabrir el reclamo y nos pondremos en contacto con vos por otros medios para conocer más detalles y avanzar en una solución. Gracias por avisarnos, tu respuesta nos ayuda a seguir trabajando para mejorar los espacios públicos de San Martín."
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        420
+      ],
+      "id": "d92378a9-d94f-46e5-ac46-e41ad18ed93f",
+      "name": "Guardar bot NO",
+      "credentials": {
+        "supabaseApi": {
+          "id": "UKrsQPrPQ2Mu8WHt",
+          "name": "Supabase account"
+        }
+      },
+      "notes": "NUEVO: guarda la respuesta del bot en el chat",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "tableId": "whatsapp_mensajes",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "reclamo_id",
+              "fieldValue": "={{ $('Buscar notificación').item.json.reclamo_id }}"
+            },
+            {
+              "fieldId": "direccion",
+              "fieldValue": "saliente"
+            },
+            {
+              "fieldId": "origen",
+              "fieldValue": "bot"
+            },
+            {
+              "fieldId": "tipo",
+              "fieldValue": "texto"
+            },
+            {
+              "fieldId": "wa_message_id",
+              "fieldValue": "={{ $('HTTP Request').item.json.messages?.[0]?.id }}"
+            },
+            {
+              "fieldId": "contenido",
+              "fieldValue": "Este número corresponde a un bot automático de avisos. No es un canal de atención por WhatsApp. Para responder sobre el reclamo informado, respondé únicamente Sí o No."
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        600
+      ],
+      "id": "e5d8a588-963f-4638-b723-8af1ca5feb29",
+      "name": "Guardar bot aviso",
+      "credentials": {
+        "supabaseApi": {
+          "id": "UKrsQPrPQ2Mu8WHt",
+          "name": "Supabase account"
+        }
+      },
+      "notes": "NUEVO: guarda la respuesta del bot en el chat",
+      "notesInFlow": true
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Normalizar mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar mensaje": {
+      "main": [
+        [
+          {
+            "node": "Buscar notificación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar notificación": {
+      "main": [
+        [
+          {
+            "node": "Guardar mensaje vecino",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar mensaje vecino": {
+      "main": [
+        [
+          {
+            "node": "¿Esperando respuesta?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Esperando respuesta?": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Update a row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update a row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update a row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update a row1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update a row1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update a row": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update a row1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Guardar bot SÍ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request2": {
+      "main": [
+        [
+          {
+            "node": "Guardar bot NO",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Guardar bot aviso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}
